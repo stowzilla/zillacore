@@ -1,0 +1,10 @@
+{
+  "galen": {
+    "fizzy_name": "Galen",
+    "local": true,
+    "env": {
+      "FIZZY_TOKEN": "your-fizzy-token",
+      "DISCORD_BOT_TOKEN": "your-discord-bot-token"
+    }
+  }
+}

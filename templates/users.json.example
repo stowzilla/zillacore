@@ -1,0 +1,121 @@
+{
+  "users": [
+    {
+      "canonical_name": "Adam Dalton",
+      "identities": {
+        "discord": {
+          "username": "fladamd",
+          "user_id": "832331260088287242",
+          "display_name": "fladamd"
+        },
+        "github": {
+          "username": "dalton"
+        },
+        "fizzy": {
+          "username": "adam-dalton"
+        }
+      },
+      "aliases": ["Andy"],
+      "relationships": {
+        "spouse": "Larissa"
+      },
+      "notes": "Primary user"
+    },
+    {
+      "canonical_name": "Andy Davis",
+      "identities": {
+        "discord": {
+          "username": "ardavis",
+          "user_id": "397928984232591361",
+          "display_name": "ardavis"
+        },
+        "github": {
+          "username": "ardavis"
+        }
+      },
+      "aliases": [],
+      "relationships": {},
+      "notes": "Works with Adam on zillacore development"
+    },
+    {
+      "canonical_name": "Kaylee",
+      "identities": {
+        "discord": {
+          "username": "kaylee",
+          "user_id": "1475961955125825687",
+          "display_name": "Kaylee"
+        }
+      },
+      "aliases": [],
+      "relationships": {},
+      "notes": "AI agent - cheerful, optimistic, loves fixing things"
+    },
+    {
+      "canonical_name": "Sleeper Service",
+      "identities": {
+        "discord": {
+          "username": "sleeper_service",
+          "user_id": "1476572591220199514",
+          "display_name": "Sleeper Service"
+        }
+      },
+      "aliases": [],
+      "relationships": {},
+      "notes": "AI agent - dry wit, cosmic perspective, understated"
+    },
+    {
+      "canonical_name": "Avon",
+      "identities": {
+        "discord": {
+          "username": "avon",
+          "user_id": "1476683857922228386",
+          "display_name": "Avon"
+        }
+      },
+      "aliases": [],
+      "relationships": {},
+      "notes": "AI agent - iOS specialist, pragmatic, competence-driven"
+    },
+    {
+      "canonical_name": "Galen",
+      "identities": {
+        "discord": {
+          "username": "galen",
+          "user_id": "1475925968584573181",
+          "display_name": "Galen"
+        }
+      },
+      "aliases": [],
+      "relationships": {},
+      "notes": "AI agent"
+    },
+    {
+      "canonical_name": "GLaDOS",
+      "identities": {
+        "discord": {
+          "username": "glados",
+          "user_id": "1475957005817610412",
+          "display_name": "GLaDOS"
+        }
+      },
+      "aliases": [],
+      "relationships": {},
+      "notes": "AI agent"
+    },
+    {
+      "canonical_name": "Threepio",
+      "identities": {
+        "discord": {
+          "username": "threepio",
+          "user_id": "1476068144278929438",
+          "display_name": "Threepio"
+        }
+      },
+      "aliases": [],
+      "relationships": {},
+      "notes": "AI agent"
+    }
+  ],
+  "schema_version": "1.0",
+  "last_updated": "2026-02-27T13:52:22-05:00"
+}

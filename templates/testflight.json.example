@@ -1,0 +1,8 @@
+{
+  "signing_secret": "YOUR_APPLE_WEBHOOK_SIGNING_SECRET",
+  "discord_channel_id": "CHANNEL_ID_FOR_TESTFLIGHT_NOTIFICATIONS",
+  "notify_as": "avon",
+  "api_key_path": "~/.appstoreconnect/AuthKey_6VBGCK56SQ.p8",
+  "api_key_id": "6VBGCK56SQ",
+  "issuer_id": "337a9282-6778-4fe4-bdbb-fd2845ef0c19"
+}

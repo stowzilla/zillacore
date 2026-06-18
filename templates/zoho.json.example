@@ -1,0 +1,27 @@
+{
+  "hook_secret": null,
+  "default_discord_channel_id": "YOUR_DISCORD_CHANNEL_ID",
+  "notify_as": "threepio",
+  "rules": [
+    {
+      "label": "Item Sold",
+      "enabled": true,
+      "from_contains": "",
+      "to_contains": "",
+      "subject_contains": "sold",
+      "body_contains": "",
+      "exclude_words": [],
+      "emoji": "💰",
+      "discord_channel_id": null,
+      "notify_as": null
+    }
+  ],
+  "fallback": {
+    "enabled": true,
+    "label": "Unmatched Email",
+    "emoji": "📬",
+    "exclude_words": [],
+    "discord_channel_id": null,
+    "notify_as": null
+  }
+}

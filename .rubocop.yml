@@ -1,0 +1,101 @@
+plugins:
+  - rubocop-performance
+
+AllCops:
+  TargetRubyVersion: 3.4
+  NewCops: enable
+  SuggestExtensions: false
+  Exclude:
+    - "vendor/**/*"
+    - "tmp/**/*"
+
+# Sinatra route blocks and helper methods can be long
+Metrics/BlockLength:
+  Exclude:
+    - "receiver.rb"
+    - "lib/zillacore/handlers/**/*"
+    - "test/**/*"
+    - "*.gemspec"
+
+Metrics/MethodLength:
+  Max: 40
+  Exclude:
+    - "bin/zillacore"
+    - "lib/zillacore/handlers/**/*"
+    - "monitor/**/*"
+
+Metrics/AbcSize:
+  Max: 40
+  Exclude:
+    - "bin/zillacore"
+    - "lib/zillacore/handlers/**/*"
+    - "monitor/**/*"
+
+Metrics/CyclomaticComplexity:
+  Max: 15
+  Exclude:
+    - "bin/zillacore"
+    - "lib/zillacore/handlers/**/*"
+    - "monitor/**/*"
+
+Metrics/PerceivedComplexity:
+  Max: 15
+  Exclude:
+    - "bin/zillacore"
+    - "lib/zillacore/handlers/**/*"
+    - "monitor/**/*"
+
+Metrics/ClassLength:
+  Exclude:
+    - "test/**/*"
+
+Metrics/BlockNesting:
+  Max: 4
+
+Metrics/ParameterLists:
+  Max: 8
+
+# Sinatra DSL uses top-level methods
+Style/TopLevelMethodDefinition:
+  Enabled: false
+
+# receiver.rb has the SelectiveLogger class alongside Sinatra routes
+Style/OneClassPerFile:
+  Exclude:
+    - "receiver.rb"
+
+Style/StringLiterals:
+  EnforcedStyle: double_quotes
+
+Style/StringLiteralsInInterpolation:
+  EnforcedStyle: double_quotes
+
+Style/FrozenStringLiteralComment:
+  Enabled: false
+
+Style/ClassAndModuleChildren:
+  Enabled: false
+
+Style/Documentation:
+  Enabled: false
+
+Style/MutableConstant:
+  Enabled: false
+
+# Dev deps in gemspec is fine for a gem this size
+Gemspec/DevelopmentDependencies:
+  Enabled: false
+
+Layout/LineLength:
+  Max: 150
+  Exclude:
+    - "receiver.rb"
+    - "lib/zillacore/handlers/**/*"
+    - "monitor/**/*"
+
+# Handler methods often have unused params from Sinatra/block signatures
+Lint/UnusedMethodArgument:
+  AllowUnusedKeywordArguments: true
+
+Lint/SuppressedException:
+  AllowComments: true
