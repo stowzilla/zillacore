@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ZillaCore Dashboard</title>
+<style>
+  :root { --bg: #0d1117; --card: #161b22; --border: #30363d; --text: #e6edf3; --dim: #8b949e; --green: #3fb950; --yellow: #d29922; --red: #f85149; --blue: #58a6ff; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+  .header { padding: 16px 24px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+  .header h1 { font-size: 18px; font-weight: 600; }
+  .header .meta { font-size: 13px; color: var(--dim); }
+  .status-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
+  .status-dot.active { background: var(--green); box-shadow: 0 0 6px var(--green); }
+  .status-dot.idle { background: var(--dim); }
+  .container { max-width: 1200px; margin: 0 auto; padding: 24px; }
+  .section-title { font-size: 14px; font-weight: 600; color: var(--dim); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 12px; }
+  .sessions { display: grid; gap: 12px; margin-bottom: 32px; }
+  .session-card { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 16px; cursor: pointer; transition: border-color 0.15s; }
+  .session-card:hover { border-color: var(--blue); }
+  .session-card.selected { border-color: var(--blue); box-shadow: 0 0 0 1px var(--blue); }
+  .session-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+  .agent-name { font-size: 16px; font-weight: 600; }
+  .agent-emoji { margin-right: 6px; }
+  .elapsed { font-size: 13px; color: var(--dim); font-variant-numeric: tabular-nums; }
+  .session-detail { font-size: 13px; color: var(--dim); }
+  .badge { display: inline-block; font-size: 11px; padding: 2px 8px; border-radius: 10px; font-weight: 500; }
+  .badge.alive { background: rgba(63,185,80,0.15); color: var(--green); }
+  .badge.finished { background: rgba(139,148,158,0.15); color: var(--dim); }
+  .badge.enabled { background: rgba(63,185,80,0.15); color: var(--green); }
+  .badge.disabled { background: rgba(248,81,73,0.15); color: var(--red); }
+  .deploy-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; margin-bottom: 32px; }
+  .deploy-card { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 16px; }
+  .deploy-card.occupied { border-left: 3px solid var(--red); }
+  .deploy-card.available { border-left: 3px solid var(--green); }
+  .deploy-card.deploying { border-left: 3px solid var(--yellow); }
+  .deploy-card.failed { border-left: 3px solid var(--red); background: rgba(248,81,73,0.05); }
+  .deploy-card .env-label { font-size: 14px; font-weight: 600; margin-bottom: 6px; display: flex; align-items: center; justify-content: space-between; }
+  .deploy-card .env-label .status-icon { font-size: 12px; }
+  .deploy-card .deploy-info { font-size: 13px; color: var(--dim); }
+  .deploy-card .deploy-info a { color: var(--blue); text-decoration: none; }
+  .deploy-card .deploy-info a:hover { text-decoration: underline; }
+  .deploy-card .deploy-meta { margin-top: 6px; font-size: 12px; color: var(--dim); }
+  .cron-table { width: 100%; border-collapse: collapse; font-size: 13px; margin-bottom: 32px; }
+  .cron-table th { text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--border); color: var(--dim); font-weight: 500; }
+  .cron-table td { padding: 8px 12px; border-bottom: 1px solid var(--border); }
+  .cron-table tr:last-child td { border-bottom: none; }
+  .cron-table .job-id { font-weight: 600; }
+  .cron-table .task-cell { min-width: 200px; }
+  .cron-table .prompt-text { display: inline-block; color: var(--dim); max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; vertical-align: middle; }
+  .cron-table .prompt-text:hover { color: var(--text); }
+  .cron-table .prompt-text::after { content: ' ▸'; font-size: 10px; color: var(--dim); }
+  .cron-table .prompt-full { color: var(--dim); white-space: pre-wrap; word-break: break-word; max-width: 400px; font-size: 12px; cursor: pointer; }
+  .cron-table .script-link { color: var(--blue); cursor: pointer; text-decoration: underline; text-decoration-style: dotted; }
+  .cron-table .script-link:hover { text-decoration-style: solid; }
+  .cron-toggle { background: none; border: 1px solid var(--border); color: var(--dim); padding: 2px 8px; border-radius: 4px; cursor: pointer; font-size: 11px; }
+  .cron-toggle:hover { border-color: var(--blue); color: var(--text); }
+  .cron-runs { font-size: 12px; }
+  .cron-runs a { color: var(--blue); text-decoration: none; cursor: pointer; }
+  .cron-runs a:hover { text-decoration: underline; }
+  .cron-runs .run-time { color: var(--dim); margin-left: 4px; }
+  .script-viewer { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; margin-top: 8px; overflow: hidden; max-width: 600px; }
+  .script-viewer-header { display: flex; justify-content: space-between; align-items: center; padding: 6px 10px; border-bottom: 1px solid var(--border); font-size: 11px; color: var(--dim); }
+  .script-viewer pre { margin: 0; padding: 12px; font-family: 'SF Mono', 'Fira Code', monospace; font-size: 12px; line-height: 1.5; overflow-x: auto; max-height: 400px; overflow-y: auto; }
+  .script-viewer .rb-kw { color: #ff7b72; }
+  .script-viewer .rb-str { color: #a5d6ff; }
+  .script-viewer .rb-cm { color: #8b949e; font-style: italic; }
+  .script-viewer .rb-num { color: #79c0ff; }
+  .script-viewer .rb-sym { color: #ffa657; }
+  .script-viewer .rb-const { color: #d2a8ff; }
+  .script-viewer .rb-ivar { color: #ffa657; }
+  .log-viewer { background: var(--card); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  .log-header { padding: 12px 16px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+  .log-header .title { font-size: 14px; font-weight: 600; }
+  .log-header .controls { display: flex; gap: 8px; align-items: center; }
+  .log-header button { background: var(--border); border: none; color: var(--text); padding: 4px 12px; border-radius: 4px; cursor: pointer; font-size: 12px; }
+  .log-header button:hover { background: var(--dim); }
+  .log-header button.active { background: var(--blue); }
+  .log-body { padding: 16px; max-height: 70vh; overflow-y: auto; font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace; font-size: 12px; line-height: 1.6; white-space: pre-wrap; word-break: break-all; color: var(--dim); }
+  .log-body.empty { text-align: center; padding: 48px; color: var(--dim); }
+  .recent-row { display: flex; align-items: center; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+  .recent-row:last-child { border-bottom: none; }
+  .recent-row .agent { font-weight: 600; min-width: 120px; }
+  .recent-row .context { color: var(--dim); flex: 1; }
+  .recent-row .time { color: var(--dim); font-variant-numeric: tabular-nums; }
+  @media (max-width: 640px) { .container { padding: 12px; } .session-top { flex-wrap: wrap; } }
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>⚡ ZillaCore</h1>
+  <div class="meta">
+    <span class="status-dot idle" id="conn-dot"></span>
+    <span id="version"></span> · updated <span id="last-update">—</span>
+  </div>
+</div>
+<div class="container">
+  <div id="active-section">
+    <div class="section-title">Active Sessions</div>
+    <div class="sessions" id="sessions"></div>
+  </div>
+  <div id="log-section" style="display:none; margin-bottom:32px;">
+    <div class="log-viewer">
+      <div class="log-header">
+        <div class="title" id="log-title">Log</div>
+        <div class="controls">
+          <button id="btn-follow" class="active" onclick="toggleFollow()">Auto-scroll</button>
+          <button onclick="closeLog()">✕ Close</button>
+        </div>
+      </div>
+      <div class="log-body" id="log-body">Select a session to view its log.</div>
+    </div>
+  </div>
+  <div id="deploy-section" style="margin-bottom:32px;">
+    <div class="section-title">Deployments</div>
+    <div class="deploy-grid" id="deployments"></div>
+  </div>
+  <div id="cron-section" style="margin-bottom:32px;">
+    <div class="section-title">Cron Jobs</div>
+    <div id="cron-jobs"></div>
+  </div>
+  <div>
+    <div class="section-title">Recent Sessions</div>
+    <div id="recent"></div>
+  </div>
+</div>
+<script>
+const AGENTS = <%= load_dashboard_agents.to_json %>;
+const DASH_TOKEN = new URLSearchParams(window.location.search).get('token');
+function apiUrl(path) { return DASH_TOKEN ? path + (path.includes('?') ? '&' : '?') + 'token=' + encodeURIComponent(DASH_TOKEN) : path; }
+let selectedFile = null;
+let autoFollow = true;
+let logPollTimer = null;
+
+function agentMeta(name) {
+  return AGENTS[(name||'').toLowerCase()] || { emoji: '❓', color: 'gray' };
+}
+
+function elapsed(s) {
+  if (s < 60) return s + 's';
+  if (s < 3600) return Math.floor(s/60) + 'm';
+  return Math.floor(s/3600) + 'h ' + Math.floor((s%3600)/60) + 'm';
+}
+
+function contextLabel(key) {
+  if (key.startsWith('discord-')) return 'Discord';
+  if (key.startsWith('card-')) return '#' + key.split('-')[1];
+  return key;
+}
+
+function timeAgo(iso) {
+  if (!iso) return '—';
+  const d = (Date.now() - new Date(iso).getTime()) / 1000;
+  if (d < 60) return 'just now';
+  if (d < 3600) return Math.floor(d/60) + 'm ago';
+  if (d < 86400) return Math.floor(d/3600) + 'h ago';
+  return Math.floor(d/86400) + 'd ago';
+}
+
+function selectSession(logFile, agentName) {
+  selectedFile = logFile;
+  document.getElementById('log-section').style.display = 'block';
+  document.getElementById('log-title').textContent = agentMeta(agentName).emoji + ' ' + agentName + ' — Log';
+  document.getElementById('log-body').textContent = 'Loading…';
+  document.querySelectorAll('.session-card').forEach(c => c.classList.remove('selected'));
+  document.querySelectorAll('.session-card').forEach(c => { if (c.dataset.file === logFile) c.classList.add('selected'); });
+  fetchLog();
+  clearInterval(logPollTimer);
+  logPollTimer = setInterval(fetchLog, 3000);
+}
+
+function closeLog() {
+  selectedFile = null;
+  document.getElementById('log-section').style.display = 'none';
+  clearInterval(logPollTimer);
+  document.querySelectorAll('.session-card').forEach(c => c.classList.remove('selected'));
+}
+
+function toggleFollow() {
+  autoFollow = !autoFollow;
+  document.getElementById('btn-follow').classList.toggle('active', autoFollow);
+}
+
+async function fetchLog() {
+  if (!selectedFile) return;
+  try {
+    const r = await fetch(apiUrl('/api/logs?file=' + encodeURIComponent(selectedFile) + '&lines=300'));
+    if (!r.ok) { document.getElementById('log-body').textContent = 'Error: ' + r.status; return; }
+    const text = await r.text();
+    const el = document.getElementById('log-body');
+    el.textContent = text || '(empty)';
+    if (autoFollow) el.scrollTop = el.scrollHeight;
+  } catch(e) { document.getElementById('log-body').textContent = 'Fetch error: ' + e.message; }
+}
+
+async function poll() {
+  try {
+    const r = await fetch(apiUrl('/api/status'));
+    const data = await r.json();
+    document.getElementById('conn-dot').className = 'status-dot active';
+    document.getElementById('version').textContent = 'v' + data.version;
+    document.getElementById('last-update').textContent = new Date().toLocaleTimeString();
+
+    const el = document.getElementById('sessions');
+    if (data.sessions.length === 0) {
+      el.innerHTML = '<div style="color:var(--dim);font-size:14px;">💤 No active sessions</div>';
+    } else {
+      el.innerHTML = data.sessions.map(s => {
+        const m = agentMeta(s.agent);
+        const sel = s.log_file === selectedFile ? ' selected' : '';
+        return '<div class="session-card' + sel + '" data-file="' + (s.log_file||'') + '" onclick="selectSession(\'' + (s.log_file||'').replace(/'/g,"\\'") + "','" + (s.agent||'').replace(/'/g,"\\'") + '\')">' +
+          '<div class="session-top"><span><span class="agent-emoji">' + m.emoji + '</span><span class="agent-name">' + (s.agent||'Unknown') + '</span></span>' +
+          '<span class="elapsed">' + elapsed(s.elapsed_seconds) + '</span></div>' +
+          '<div class="session-detail">' + contextLabel(s.card_key) + ' · PID ' + s.pid + ' <span class="badge alive">running</span></div></div>';
+      }).join('');
+    }
+
+    const rec = document.getElementById('recent');
+    if ((data.recent||[]).length === 0) {
+      rec.innerHTML = '<div style="color:var(--dim);font-size:13px;">No recent sessions</div>';
+    } else {
+      rec.innerHTML = data.recent.map(s => {
+        const m = agentMeta(s.agent);
+        const clickable = s.log_file ? ' style="cursor:pointer" onclick="selectSession(\'' + s.log_file.replace(/'/g,"\\'") + "','" + (s.agent||'').replace(/'/g,"\\'") + '\')"' : '';
+        return '<div class="recent-row"' + clickable + '><span class="agent">' + m.emoji + ' ' + (s.agent||'Unknown') + '</span>' +
+          '<span class="context">' + contextLabel(s.card_key) + '</span>' +
+          '<span class="time">' + timeAgo(s.finished_at) + '</span></div>';
+      }).join('');
+    }
+  } catch(e) {
+    document.getElementById('conn-dot').className = 'status-dot idle';
+  }
+}
+
+async function toggleCron(id, enabled) {
+  try {
+    await fetch(apiUrl('/api/cron/toggle'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, enabled })
+    });
+    pollCron();
+  } catch(e) {}
+}
+
+let cronExpanded = {};
+let cronScriptCache = {};
+
+function togglePrompt(id) {
+  cronExpanded[id] = !cronExpanded[id];
+  pollCron();
+}
+
+async function viewScript(id, path) {
+  if (cronExpanded[id]) { cronExpanded[id] = false; pollCron(); return; }
+  cronExpanded[id] = true;
+  if (!cronScriptCache[path]) {
+    try {
+      const r = await fetch(apiUrl('/api/cron/script?path=' + encodeURIComponent(path)));
+      cronScriptCache[path] = r.ok ? await r.text() : 'Error: ' + r.status;
+    } catch(e) { cronScriptCache[path] = 'Fetch error: ' + e.message; }
+  }
+  pollCron();
+}
+
+function highlightRuby(code) {
+  // Tokenize first to avoid regexes matching inside HTML tags from earlier passes
+  const tokens = [];
+  const rules = [
+    [/^#[^\n]*/, 'rb-cm'],
+    [/^"(?:[^"\\]|\\.)*"/, 'rb-str'],
+    [/^'(?:[^'\\]|\\.)*'/, 'rb-str'],
+    [/^(?:def|end|class|module|do|if|elsif|else|unless|while|until|for|in|return|yield|begin|rescue|ensure|raise|require|require_relative|include|extend|attr_accessor|attr_reader|attr_writer|private|protected|public|self|true|false|nil|and|or|not|then|case|when|super|lambda|proc|block_given\?)(?!\w)/, 'rb-kw'],
+    [/^@\w+/, 'rb-ivar'],
+    [/^[A-Z][A-Za-z0-9_]*/, 'rb-const'],
+    [/^:[a-zA-Z_]\w*/, 'rb-sym'],
+    [/^\d+\.?\d*/, 'rb-num'],
+  ];
+  let rest = code;
+  while (rest.length > 0) {
+    let matched = false;
+    // Try word-boundary rules only at word-appropriate positions
+    for (const [re, cls] of rules) {
+      const m = rest.match(re);
+      if (m) {
+        // For keywords, ensure we're at a word boundary (not mid-identifier)
+        if (cls === 'rb-kw' && tokens.length > 0) {
+          const prev = tokens[tokens.length - 1];
+          if (!prev[1] && /\w$/.test(prev[0])) continue;
+        }
+        if (cls === 'rb-sym' && tokens.length > 0) {
+          const prev = tokens[tokens.length - 1];
+          if (!prev[1] && prev[0].endsWith(':')) continue;
+        }
+        tokens.push([m[0], cls]);
+        rest = rest.slice(m[0].length);
+        matched = true;
+        break;
+      }
+    }
+    if (!matched) {
+      // Accumulate plain text
+      if (tokens.length > 0 && !tokens[tokens.length - 1][1]) {
+        tokens[tokens.length - 1][0] += rest[0];
+      } else {
+        tokens.push([rest[0], null]);
+      }
+      rest = rest.slice(1);
+    }
+  }
+  return tokens.map(([text, cls]) => {
+    const esc = text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    return cls ? '<span class="' + cls + '">' + esc + '</span>' : esc;
+  }).join('');
+}
+
+async function fetchCronLogs(id) {
+  try {
+    const r = await fetch(apiUrl('/api/cron/logs?id=' + encodeURIComponent(id)));
+    return await r.json();
+  } catch(e) { return []; }
+}
+
+async function pollCron() {
+  try {
+    const r = await fetch(apiUrl('/api/cron'));
+    const data = await r.json();
+    const el = document.getElementById('cron-jobs');
+    const jobs = Object.entries(data.jobs || {});
+    if (jobs.length === 0) {
+      el.innerHTML = '<div style="color:var(--dim);font-size:13px;">No cron jobs configured</div>';
+      return;
+    }
+    let html = '<table class="cron-table"><tr><th>Job</th><th>Schedule</th><th>Agent</th><th>Project</th><th>Task</th><th>Runs</th><th></th></tr>';
+    const logPromises = jobs.map(([id]) => fetchCronLogs(id));
+    const allLogs = await Promise.all(logPromises);
+    jobs.forEach(([id, j], i) => {
+      const badge = j.enabled ? '<span class="badge enabled">enabled</span>' : '<span class="badge disabled">disabled</span>';
+      const agent = j.script ? 'script' : (j.agent || '—');
+      const toggleLabel = j.enabled ? 'disable' : 'enable';
+      const expanded = cronExpanded[id];
+      let task;
+      if (j.script) {
+        const scriptName = j.script.split('/').pop();
+        if (expanded && cronScriptCache[j.script]) {
+          task = '<span class="prompt-text" onclick="event.stopPropagation();viewScript(\'' + id + '\',\'' + j.script.replace(/'/g,"\\'") + '\')" title="Click to collapse"><code>' + scriptName + '</code> ▾</span>' +
+            '<div class="script-viewer"><div class="script-viewer-header"><span>' + j.script + '</span></div><pre>' + highlightRuby(cronScriptCache[j.script]) + '</pre></div>';
+        } else {
+          task = '<span class="prompt-text" onclick="event.stopPropagation();viewScript(\'' + id + '\',\'' + j.script.replace(/'/g,"\\'") + '\')" title="Click to view source"><code>' + scriptName + '</code></span>';
+        }
+      } else {
+        const prompt = j.prompt || '';
+        const rbMatch = prompt.match(/(\/\S+\.rb)\b/);
+        if (rbMatch) {
+          const scriptPath = rbMatch[1];
+          const scriptName = scriptPath.split('/').pop();
+          if (expanded && cronScriptCache[scriptPath]) {
+            task = '<span class="prompt-text" onclick="event.stopPropagation();togglePrompt(\'' + id + '\')" title="Click to collapse">' + prompt.slice(0,40).replace(/</g,'&lt;') + '…</span> ' +
+              '<span class="script-link" onclick="event.stopPropagation();viewScript(\'' + id + '\',\'' + scriptPath.replace(/'/g,"\\'") + '\')" title="View source">' + scriptName + ' ▾</span>' +
+              '<div class="script-viewer"><div class="script-viewer-header"><span>' + scriptPath + '</span></div><pre>' + highlightRuby(cronScriptCache[scriptPath]) + '</pre></div>';
+          } else if (expanded) {
+            task = '<span class="prompt-full" onclick="event.stopPropagation();togglePrompt(\'' + id + '\')" title="Click to collapse">' + prompt.replace(/</g,'&lt;') + '</span>';
+          } else {
+            task = '<span class="prompt-text" onclick="event.stopPropagation();togglePrompt(\'' + id + '\')" title="Click to expand">' + prompt.slice(0,40).replace(/</g,'&lt;') + '…</span> ' +
+              '<span class="script-link" onclick="event.stopPropagation();viewScript(\'' + id + '\',\'' + scriptPath.replace(/'/g,"\\'") + '\')" title="View source">' + scriptName + '</span>';
+          }
+        } else {
+          task = expanded
+            ? '<span class="prompt-full" onclick="event.stopPropagation();togglePrompt(\'' + id + '\')" title="Click to collapse">' + prompt.replace(/</g,'&lt;') + '</span>'
+            : '<span class="prompt-text" onclick="event.stopPropagation();togglePrompt(\'' + id + '\')" title="Click to expand">' + prompt.slice(0,60).replace(/</g,'&lt;') + (prompt.length > 60 ? '…' : '') + '</span>';
+        }
+      }
+      const logs = allLogs[i] || [];
+      let runsHtml = '<div class="cron-runs">';
+      if (logs.length === 0) {
+        runsHtml += '<span style="color:var(--dim)">none</span>';
+      } else {
+        logs.slice(0, 3).forEach(l => {
+          const fname = l.file.split('/').pop();
+          runsHtml += '<div><a onclick="selectSession(\'' + l.file.replace(/'/g,"\\'") + "','" + (j.agent||'cron').replace(/'/g,"\\'") + '\')">' + fname.replace(/^(agent-cron|cron-script)-/, '').replace('.log','') + '</a><span class="run-time">' + timeAgo(l.modified) + '</span></div>';
+        });
+        if (logs.length > 3) runsHtml += '<div style="color:var(--dim)">+' + (logs.length - 3) + ' more</div>';
+      }
+      runsHtml += '</div>';
+      html += '<tr><td class="job-id">' + id + '</td><td><code>' + j.schedule + '</code></td><td>' + agent + '</td><td>' + (j.project||'—') + '</td><td class="task-cell">' + task + '</td><td>' + runsHtml + '</td><td>' + badge + ' <button class="cron-toggle" onclick="toggleCron(\'' + id + '\',' + !j.enabled + ')">' + toggleLabel + '</button></td></tr>';
+    });
+    html += '</table>';
+    el.innerHTML = html;
+  } catch(e) {}
+}
+
+async function pollDeploys() {
+  try {
+    const r = await fetch(apiUrl('/api/deployments'));
+    const data = await r.json();
+    const el = document.getElementById('deployments');
+    const deps = data.deployments || [];
+    if (deps.length === 0) {
+      el.innerHTML = '<div style="color:var(--dim);font-size:13px;">No environments configured</div>';
+      return;
+    }
+    el.innerHTML = deps.map(d => {
+      const deploying = d.last_deploy_status === 'deploying';
+      const failed = d.last_deploy_status === 'failed';
+      const cls = failed ? 'failed' : deploying ? 'deploying' : d.status === 'occupied' ? 'occupied' : 'available';
+      const icon = failed ? '💥' : deploying ? '🚀' : d.status === 'occupied' ? '🔴' : '🟢';
+      let info = '';
+      if (d.status === 'occupied') {
+        const card = d.card_number ? '<a href="https://fizzy.do/cards/' + d.card_number + '" target="_blank">#' + d.card_number + '</a>' : 'unknown';
+        const branch = d.branch ? ' — <code>' + d.branch.replace(/</g,'&lt;') + '</code>' : '';
+        const pr = d.pr_url ? ' · <a href="' + d.pr_url + '" target="_blank">PR #' + d.pr_number + '</a>' : '';
+        info = card + branch + pr;
+      } else {
+        const last = d.last_card ? ' (was #' + d.last_card + ')' : '';
+        info = 'Available' + last;
+      }
+      const meta = d.deployed_at ? timeAgo(d.deployed_at) + (d.deployed_by ? ' by ' + d.deployed_by : '') : '';
+      const url = d.url ? '<a href="' + d.url + '" target="_blank" style="font-size:11px;color:var(--dim);">↗ open</a>' : '';
+      return '<div class="deploy-card ' + cls + '">' +
+        '<div class="env-label"><span>' + (d.label || d.env) + '</span><span class="status-icon">' + icon + ' ' + url + '</span></div>' +
+        '<div class="deploy-info">' + info + '</div>' +
+        (meta ? '<div class="deploy-meta">' + meta + '</div>' : '') +
+        '</div>';
+    }).join('');
+  } catch(e) {}
+}
+
+poll();
+pollDeploys();
+pollCron();
+setInterval(poll, 5000);
+setInterval(pollDeploys, 10000);
+setInterval(pollCron, 30000);
+</script>
+</body>
+</html>

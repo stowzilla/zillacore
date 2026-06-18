@@ -1,0 +1,24 @@
+{
+  "authorized_users": [
+    {"id": "397928984232591361", "name": "Andy", "human": true},
+    {"id": "832331260088287242", "name": "Adam", "human": true},
+    {"id": "1475925968584573181", "name": "Galen", "human": false},
+    {"id": "1475957005817610412", "name": "GLaDOS", "human": false},
+    {"id": "1476068144278929438", "name": "Threepio", "human": false},
+    {"id": "1475961955125825687", "name": "Kaylee", "human": false},
+    {"id": "1476572591220199514", "name": "Sleeper Service", "human": false},
+    {"id": "1476683857922228386", "name": "Avon", "human": false},
+    {"id": "1476689687966908601", "name": "Sheogorath", "human": false}
+  ],
+  "boards": {
+    "development": {
+      "board_id": "03f5ivksx9wnll33cu3ybs66r",
+      "webhook_secret": "your-dev-board-webhook-secret",
+      "columns": {
+        "right_now": "03f5xa5q9fog9592pa1279dts",
+        "needs_review": "03f5ykobhpsd78hbuvajtn8g8",
+        "uat": "03fsmglsr6az06ppyotawsti8"
+      }
+    }
+  }
+}

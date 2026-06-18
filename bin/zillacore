@@ -1,0 +1,1521 @@
+#!/usr/bin/env ruby
+
+require "json"
+require "optparse"
+require "fileutils"
+require "open3"
+require "net/http"
+require "uri"
+require "time"
+
+# ZillaCore CLI - Register and manage projects with ZillaCore server
+
+ZILLACORE_ROOT = File.expand_path("..", __dir__)
+require_relative "../lib/zillacore/version"
+ZILLACORE_VERSION = ZillaCore::VERSION
+
+ZILLACORE_DIR = File.join(Dir.home, ".zillacore")
+PROJECTS_FILE = File.join(ZILLACORE_DIR, "projects.json")
+CONFIG_FILE = File.join(ZILLACORE_DIR, "config.json")
+PID_FILE = File.join(ZILLACORE_DIR, "server.pid")
+
+def ensure_zillacore_dir
+  FileUtils.mkdir_p(ZILLACORE_DIR)
+end
+
+def load_projects
+  return {} unless File.exist?(PROJECTS_FILE)
+
+  JSON.parse(File.read(PROJECTS_FILE))
+rescue JSON::ParserError
+  {}
+end
+
+def save_projects(projects)
+  ensure_zillacore_dir
+  File.write(PROJECTS_FILE, JSON.pretty_generate(projects))
+end
+
+def load_config
+  return {} unless File.exist?(CONFIG_FILE)
+
+  JSON.parse(File.read(CONFIG_FILE))
+rescue JSON::ParserError
+  {}
+end
+
+def save_config(config)
+  ensure_zillacore_dir
+  File.write(CONFIG_FILE, JSON.pretty_generate(config))
+end
+
+def find_server_pid
+  # First check PID file
+  if File.exist?(PID_FILE)
+    pid = File.read(PID_FILE).strip.to_i
+    return pid if pid.positive? && process_running?(pid)
+
+    # Stale PID file
+    File.delete(PID_FILE)
+
+  end
+
+  # Fallback: search for running receiver.rb process
+  # Try multiple methods to find the process
+
+  # Method 1: pgrep with full pattern
+  output, status = Open3.capture2("pgrep", "-f", 'ruby.*receiver\.rb')
+  if status.success? && !output.strip.empty?
+    pids = output.strip.split("\n").map(&:to_i)
+    return pids.first if pids.any?
+  end
+
+  # Method 2: ps + grep (more portable)
+  output, status = Open3.capture2("ps", "aux")
+  if status.success?
+    output.each_line do |line|
+      next unless line.include?("ruby") && line.include?("receiver.rb") && !line.include?("grep")
+
+      # Extract PID (second column in ps aux output)
+      parts = line.split
+      pid = parts[1].to_i
+      return pid if pid.positive? && process_running?(pid)
+    end
+  end
+
+  nil
+end
+
+def process_running?(pid)
+  Process.kill(0, pid)
+  true
+rescue Errno::ESRCH, Errno::EPERM
+  false
+end
+
+def fetch_active_sessions
+  uri = URI("http://localhost:4567/api/status")
+  response = Net::HTTP.get_response(uri)
+  return [] unless response.is_a?(Net::HTTPSuccess)
+
+  data = JSON.parse(response.body)
+  (data["sessions"] || data).select { |s| s["alive"] }
+rescue StandardError
+  []
+end
+
+def wait_for_agents_to_finish
+  sessions = fetch_active_sessions
+  return true if sessions.empty?
+
+  agents = sessions.map { |s| s["agent"] || "Unknown" }
+  puts "⏳ Waiting for #{sessions.size} active agent(s) to finish: #{agents.join(", ")}"
+  puts "   (Ctrl+C to restart immediately)"
+
+  begin
+    loop do
+      sleep 5
+      sessions = fetch_active_sessions
+      if sessions.empty?
+        puts "✓ All agents finished."
+        return true
+      end
+      agents = sessions.map { |s| s["agent"] || "Unknown" }
+      elapsed = sessions.map { |s| s["elapsed_seconds"] || 0 }.max
+      puts "   Still waiting... #{sessions.size} agent(s) active: #{agents.join(", ")} (#{elapsed}s)"
+    end
+  rescue Interrupt
+    puts "\n⚡ Skipping wait, restarting now..."
+    true
+  end
+end
+
+def stop_server
+  pid = find_server_pid
+
+  unless pid
+    puts "No running ZillaCore server found."
+    return false
+  end
+
+  puts "Stopping ZillaCore server (PID: #{pid})..."
+
+  # Also stop the monitor daemon
+  daemon_pid_file = "/tmp/zillacore-daemon.pid"
+  if File.exist?(daemon_pid_file)
+    daemon_pid = File.read(daemon_pid_file).strip.to_i
+    begin
+      Process.kill("TERM", daemon_pid)
+      puts "✓ Monitor daemon stopped (PID: #{daemon_pid})."
+    rescue Errno::ESRCH
+      # Already dead
+    end
+    File.delete(daemon_pid_file)
+  end
+
+  begin
+    Process.kill("TERM", pid)
+
+    # Wait up to 5 seconds for graceful shutdown
+    5.times do
+      sleep 2
+      next if process_running?(pid)
+
+      puts "✓ Server stopped."
+      FileUtils.rm_f(PID_FILE)
+      return true
+    end
+
+    # Force kill if still running
+    puts "Server didn't stop gracefully, forcing..."
+    Process.kill("KILL", pid)
+    sleep 1
+
+    FileUtils.rm_f(PID_FILE)
+    puts "✓ Server stopped (forced)."
+    true
+  rescue Errno::ESRCH
+    puts "✓ Server already stopped."
+    FileUtils.rm_f(PID_FILE)
+    true
+  rescue Errno::EPERM
+    puts "Error: Permission denied. Try running with sudo or check process ownership."
+    false
+  rescue StandardError => e
+    puts "Error stopping server: #{e.message}"
+    false
+  end
+end
+
+def start_server(daemon: false)
+  # Resolve the real path of the zillacore script (follows symlinks)
+  receiver_path = File.join(ZILLACORE_ROOT, "receiver.rb")
+  receiver_dir = ZILLACORE_ROOT
+
+  unless File.exist?(receiver_path)
+    puts "Error: receiver.rb not found at #{receiver_path}"
+    exit 1
+  end
+
+  # Check if already running
+  if find_server_pid
+    puts "Error: ZillaCore server is already running."
+    puts "Run 'zillacore stop' or 'zillacore restart' to manage it."
+    exit 1
+  end
+
+  if daemon
+    # Daemon mode: start in background (like the old behavior)
+    log_dir = File.join(receiver_dir, "tmp")
+    FileUtils.mkdir_p(log_dir)
+    log_file = File.join(log_dir, "zillacore-server.log")
+
+    puts "Starting ZillaCore server (daemon)..."
+
+    pid = spawn("ruby", receiver_path,
+                chdir: receiver_dir,
+                out: log_file,
+                err: %i[child out])
+    Process.detach(pid)
+
+    ensure_zillacore_dir
+    File.write(PID_FILE, pid.to_s)
+    File.write(File.join(ZILLACORE_DIR, "server.root"), receiver_dir)
+
+    puts "✓ Server started in background (PID: #{pid})"
+    puts "  Logs: tail -f #{log_file}"
+    puts "  Stop: zillacore stop"
+    puts "  Restart: zillacore restart"
+  else
+    # Foreground mode (default): run in the current process like `rails server`
+    puts "Starting ZillaCore server (pid: #{Process.pid})..."
+    puts "  Stop: Ctrl+C"
+    puts ""
+
+    ensure_zillacore_dir
+    File.write(PID_FILE, Process.pid.to_s)
+    File.write(File.join(ZILLACORE_DIR, "server.root"), receiver_dir)
+
+    begin
+      Dir.chdir(receiver_dir) do
+        exec("ruby", receiver_path)
+      end
+    rescue Interrupt
+      puts "\nStopping server..."
+    ensure
+      FileUtils.rm_f(PID_FILE)
+    end
+  end
+end
+
+def detect_project_info(path)
+  path = File.expand_path(path)
+
+  # Get git remote URL to extract repo name
+  github_repo = nil
+  if Dir.exist?(File.join(path, ".git"))
+    remote_url, _, status = Open3.capture3("git", "remote", "get-url", "origin", chdir: path)
+    if status.success?
+      # Parse GitHub repo from URL (supports both HTTPS and SSH)
+      if remote_url =~ %r{github\.com[/:](.+?)\.git}
+        github_repo = Regexp.last_match(1)
+      elsif remote_url =~ %r{github\.com[/:](.+)}
+        github_repo = Regexp.last_match(1).chomp
+      end
+    end
+  end
+
+  # Suggest project key from directory name
+  project_key = File.basename(path).downcase.gsub(/[^a-z0-9-]/, "-")
+
+  {
+    "repo_path" => path,
+    "github_repo" => github_repo,
+    "project_key" => project_key
+  }
+end
+
+def register_project(options)
+  path = options[:path] || Dir.pwd
+  info = detect_project_info(path)
+
+  projects = load_projects
+
+  # Interactive prompts
+  puts "Registering project from: #{info["repo_path"]}"
+  puts
+
+  print "Project key [#{info["project_key"]}]: "
+  project_key = $stdin.gets.chomp
+  project_key = info["project_key"] if project_key.empty?
+
+  if projects.key?(project_key) && !options[:force]
+    puts "Error: Project '#{project_key}' already exists. Use --force to overwrite."
+    exit 1
+  end
+
+  print "Fizzy tags (comma-separated) [#{project_key}]: "
+  tags_input = $stdin.gets.chomp
+  fizzy_tags = tags_input.empty? ? [project_key] : tags_input.split(",").map(&:strip)
+
+  print "GitHub repo [#{info["github_repo"]}]: "
+  github_repo = $stdin.gets.chomp
+  github_repo = info["github_repo"] if github_repo.empty?
+
+  print "CLI provider [kiro]: "
+  cli_provider = $stdin.gets.chomp
+  cli_provider = "kiro" if cli_provider.empty?
+
+  print "Default model [auto]: "
+  agent_model = $stdin.gets.chomp
+  agent_model = "auto" if agent_model.empty?
+
+  default_agent_name = ENV.fetch("AI_AGENT_NAME", "Galen")
+  print "Agent name [#{default_agent_name}]: "
+  agent_name = $stdin.gets.chomp
+  agent_name = default_agent_name if agent_name.empty?
+
+  # Build project config
+  project_config = {
+    "repo_path" => info["repo_path"],
+    "fizzy_tags" => fizzy_tags,
+    "github_repo" => github_repo,
+    "agent_name" => agent_name,
+    "agent_model" => agent_model,
+    "cli_provider" => cli_provider
+  }
+
+  projects[project_key] = project_config
+  save_projects(projects)
+
+  puts
+  puts "✓ Project '#{project_key}' registered successfully!"
+  puts "  Repo: #{info["repo_path"]}"
+  puts "  Tags: #{fizzy_tags.join(", ")}"
+  puts "  GitHub: #{github_repo}" if github_repo
+end
+
+def unregister_project(project_key)
+  projects = load_projects
+
+  unless projects.key?(project_key)
+    puts "Error: Project '#{project_key}' not found."
+    exit 1
+  end
+
+  projects.delete(project_key)
+  save_projects(projects)
+
+  puts "✓ Project '#{project_key}' unregistered."
+end
+
+def list_projects
+  projects = load_projects
+
+  if projects.empty?
+    puts "No projects registered."
+    puts "Run 'zillacore register' from a project directory to get started."
+    return
+  end
+
+  puts "Registered projects:"
+  puts
+
+  projects.each do |key, config|
+    default_marker = config["default"] ? " (default)" : ""
+    puts "  #{key}#{default_marker}"
+    puts "    Path: #{config["repo_path"]}"
+    puts "    Tags: #{config["fizzy_tags"].join(", ")}"
+    puts "    GitHub: #{config["github_repo"]}" if config["github_repo"]
+    puts "    Agent: #{config["agent_cli"]} (model: #{config["agent_model"]})"
+    puts
+  end
+end
+
+def show_project(project_key)
+  projects = load_projects
+
+  unless projects.key?(project_key)
+    puts "Error: Project '#{project_key}' not found."
+    exit 1
+  end
+
+  config = projects[project_key]
+  puts JSON.pretty_generate(config)
+end
+
+def configure_server(options)
+  config = load_config
+
+  config["server_url"] = options[:server_url] if options[:server_url]
+
+  if options[:show]
+    puts JSON.pretty_generate(config)
+    return
+  end
+
+  # Interactive configuration
+  current_url = config["server_url"] || "http://localhost:4567"
+  print "ZillaCore server URL [#{current_url}]: "
+  server_url = $stdin.gets.chomp
+  config["server_url"] = server_url.empty? ? current_url : server_url
+
+  save_config(config)
+  puts "✓ Configuration saved."
+end
+
+# --- Brain management ---
+
+BRAIN_BASE_DIR   = File.join(ZILLACORE_DIR, "brain")
+KNOWLEDGE_DIR    = File.join(BRAIN_BASE_DIR, "knowledge")
+PERSONA_BASE_DIR = File.join(BRAIN_BASE_DIR, "persona")
+MEMORY_BASE_DIR  = File.join(BRAIN_BASE_DIR, "memory")
+KNOWLEDGE_COLLECTION = "zillacore-knowledge".freeze
+
+def memory_dir_for(agent_name)
+  File.join(MEMORY_BASE_DIR, agent_name.downcase.gsub(/[^a-z0-9-]/, "-"))
+end
+
+def persona_dir_for(agent_name)
+  File.join(PERSONA_BASE_DIR, agent_name.downcase.gsub(/[^a-z0-9-]/, "-"))
+end
+
+def persona_collection_for(agent_name)
+  "#{agent_name.downcase.gsub(/[^a-z0-9-]/, "-")}-persona"
+end
+
+def brain_init(agent_name)
+  persona_dir = persona_dir_for(agent_name)
+  persona_col = persona_collection_for(agent_name)
+
+  FileUtils.mkdir_p(KNOWLEDGE_DIR)
+  FileUtils.mkdir_p(persona_dir)
+  FileUtils.mkdir_p(File.join(BRAIN_BASE_DIR, "memory"))
+
+  # Check if qmd is available
+  unless system("which qmd > /dev/null 2>&1")
+    puts "✓ Brain directories created:"
+    puts "  Knowledge: #{KNOWLEDGE_DIR}"
+    puts "  Persona:   #{persona_dir}"
+    puts ""
+    puts "⚠  qmd is not installed. Install it to enable semantic search:"
+    puts "   npm install -g @tobilu/qmd"
+    puts ""
+    puts "Then run: zillacore brain init #{agent_name}"
+    return
+  end
+
+  # Set up shared knowledge collection (idempotent — qmd won't duplicate)
+  puts "Setting up shared knowledge collection..."
+  system("qmd", "collection", "add", KNOWLEDGE_DIR, "--name", KNOWLEDGE_COLLECTION)
+  system("qmd", "context", "add", "qmd://#{KNOWLEDGE_COLLECTION}",
+         "Shared technical knowledge: project conventions, coding patterns, architecture decisions, lessons learned")
+
+  # Set up per-agent persona collection
+  puts "Setting up persona collection for #{agent_name}..."
+  system("qmd", "collection", "add", persona_dir, "--name", persona_col)
+  system("qmd", "context", "add", "qmd://#{persona_col}",
+         "Communication style and personality for AI agent #{agent_name}")
+
+  # Set up card memory collection (per-agent)
+  memory_dir = memory_dir_for(agent_name)
+  FileUtils.mkdir_p(memory_dir)
+  puts "Setting up card memory collection for #{agent_name}..."
+  system("qmd", "collection", "add", memory_dir, "--name", "#{agent_name.downcase}-memory")
+  system("qmd", "context", "add", "qmd://#{agent_name.downcase}-memory",
+         "Per-card session memory for #{agent_name}: decisions, questions, answers, work status, timelines")
+
+  puts "Indexing..."
+  system("qmd", "update")
+
+  puts ""
+  puts "✓ Brain initialized for #{agent_name}"
+  puts "  Knowledge (shared):  #{KNOWLEDGE_DIR}"
+  puts "  Memory (#{agent_name}):  #{memory_dir}"
+  puts "  Persona (#{agent_name}):  #{persona_dir}"
+end
+
+def brain_status(agent_name)
+  persona_dir = persona_dir_for(agent_name)
+  persona_col = persona_collection_for(agent_name)
+  memory_dir = memory_dir_for(agent_name)
+
+  knowledge_files = File.directory?(KNOWLEDGE_DIR) ? Dir.glob(File.join(KNOWLEDGE_DIR, "**", "*.md")) : []
+  memory_files = File.directory?(memory_dir) ? Dir.glob(File.join(memory_dir, "**", "*.md")) : []
+  persona_files = File.directory?(persona_dir) ? Dir.glob(File.join(persona_dir, "**", "*.md")) : []
+
+  if knowledge_files.empty? && memory_files.empty? && persona_files.empty?
+    puts "No brain found. Run 'zillacore brain init' to create one."
+    return
+  end
+
+  puts "Knowledge (shared across all agents):"
+  puts "  Directory:  #{KNOWLEDGE_DIR}"
+  puts "  Collection: #{KNOWLEDGE_COLLECTION}"
+  puts "  Files:      #{knowledge_files.size}"
+  knowledge_files.each do |f|
+    puts "    #{f.sub("#{KNOWLEDGE_DIR}/", "")} (#{File.size(f)} bytes)"
+  end
+
+  puts ""
+  puts "Memory (#{agent_name}, per-card session history):"
+  puts "  Directory:  #{memory_dir}"
+  puts "  Collection: #{agent_name.downcase}-memory"
+  puts "  Files:      #{memory_files.size}"
+  memory_files.each do |f|
+    puts "    #{f.sub("#{memory_dir}/", "")} (#{File.size(f)} bytes)"
+  end
+
+  puts ""
+  puts "Persona (#{agent_name}):"
+  puts "  Directory:  #{persona_dir}"
+  puts "  Collection: #{persona_col}"
+  puts "  Files:      #{persona_files.size}"
+  persona_files.each do |f|
+    puts "    #{f.sub("#{persona_dir}/", "")} (#{File.size(f)} bytes)"
+  end
+end
+
+def brain_search(query, scope: :knowledge, agent_name: nil)
+  unless system("which qmd > /dev/null 2>&1")
+    puts "Error: qmd is not installed. Run: npm install -g @tobilu/qmd"
+    exit 1
+  end
+
+  collection = case scope
+               when :persona
+                 agent_name ||= ENV.fetch("AI_AGENT_NAME", "Galen")
+                 persona_collection_for(agent_name)
+               else
+                 KNOWLEDGE_COLLECTION
+               end
+
+  exec("qmd", "search", query, "-c", collection)
+end
+
+def brain_list
+  puts "Knowledge (shared):"
+  if File.directory?(KNOWLEDGE_DIR)
+    files = Dir.glob(File.join(KNOWLEDGE_DIR, "**", "*.md"))
+    puts "  #{KNOWLEDGE_DIR} (#{files.size} files)"
+  else
+    puts "  Not initialized"
+  end
+
+  puts ""
+  puts "Memory (per-agent, per-card):"
+  if File.directory?(MEMORY_BASE_DIR)
+    agent_dirs = Dir.children(MEMORY_BASE_DIR).select { |d| File.directory?(File.join(MEMORY_BASE_DIR, d)) }
+    if agent_dirs.empty?
+      puts "  None"
+    else
+      agent_dirs.each do |d|
+        agent_memory_dir = File.join(MEMORY_BASE_DIR, d)
+        files = Dir.glob(File.join(agent_memory_dir, "**", "*.md"))
+        puts "  #{d}: #{files.size} files"
+      end
+    end
+  else
+    puts "  Not initialized"
+  end
+
+  puts ""
+  puts "Personas:"
+  if File.directory?(PERSONA_BASE_DIR)
+    dirs = Dir.children(PERSONA_BASE_DIR).select { |d| File.directory?(File.join(PERSONA_BASE_DIR, d)) }
+    if dirs.empty?
+      puts "  None"
+    else
+      dirs.each do |d|
+        dir = File.join(PERSONA_BASE_DIR, d)
+        files = Dir.glob(File.join(dir, "**", "*.md"))
+        puts "  #{d} (#{files.size} files) — #{dir}"
+      end
+    end
+  else
+    puts "  Not initialized"
+  end
+
+  puts ""
+  puts "Run 'zillacore brain init <agent-name>' to set up a new agent."
+end
+
+# Main CLI
+options = {}
+subcommand = ARGV.shift
+
+case subcommand
+when "setup"
+  puts "🔧 ZillaCore Setup"
+  puts ""
+
+  # Create directory structure
+  dirs = %w[brain/knowledge brain/persona brain/memory handlers plans tmp/discord/draft tmp/discord/posted]
+  dirs.each do |dir|
+    path = File.join(ZILLACORE_DIR, dir)
+    FileUtils.mkdir_p(path)
+  end
+  puts "✓ Created ~/.zillacore/ directory structure"
+
+  # Copy example configs
+  templates_dir = File.join(ZILLACORE_ROOT, "templates")
+  if Dir.exist?(templates_dir)
+    copied = 0
+    Dir.glob(File.join(templates_dir, "*.example")).each do |template|
+      dest = File.join(ZILLACORE_DIR, File.basename(template, ".example"))
+      unless File.exist?(dest)
+        FileUtils.cp(template, dest)
+        copied += 1
+      end
+    end
+    puts "✓ Copied #{copied} example config(s) to ~/.zillacore/ (existing files preserved)"
+  end
+
+  puts ""
+  puts "Next steps:"
+  puts "  1. Edit config files in ~/.zillacore/ with your secrets and IDs"
+  puts "  2. Create agent configs in ~/.kiro/agents/"
+  puts "  3. Register projects: cd ~/Code/myproject && zillacore register"
+  puts "  4. Initialize brain: zillacore brain init"
+  puts "  5. Start server: zillacore server"
+
+when "register", "add"
+  OptionParser.new do |opts|
+    opts.banner = "Usage: zillacore register [options]"
+    opts.on("-p", "--path PATH", "Project path (default: current directory)")
+    opts.on("-f", "--force", "Overwrite existing project")
+  end.parse!(into: options)
+
+  register_project(options)
+
+when "unregister", "remove", "rm"
+  if ARGV.empty?
+    puts "Usage: zillacore unregister <project-key>"
+    exit 1
+  end
+  unregister_project(ARGV[0])
+
+when "list", "ls"
+  list_projects
+
+when "projects"
+  # Support "zillacore projects list" as an alias for "zillacore list"
+  projects_cmd = ARGV.shift
+  case projects_cmd
+  when "list", "ls", nil
+    list_projects
+  when "show"
+    if ARGV.empty?
+      puts "Usage: zillacore projects show <project-key>"
+      exit 1
+    end
+    show_project(ARGV[0])
+  when "default"
+    project_key = ARGV[0]
+    unless project_key
+      puts "Usage: zillacore projects default <project-key>"
+      puts "  Sets the default project for project-specific setup (e.g., .env copying)"
+      exit 1
+    end
+
+    projects = load_projects
+    unless projects.key?(project_key)
+      puts "Error: Project '#{project_key}' not found."
+      puts "Available projects: #{projects.keys.join(", ")}"
+      exit 1
+    end
+
+    # Remove default flag from all projects, then set it on the target
+    projects.each_value { |config| config.delete("default") }
+    projects[project_key]["default"] = true
+    save_projects(projects)
+
+    puts "✓ Set '#{project_key}' as the default project"
+  else
+    puts "Unknown projects command: #{projects_cmd}"
+    puts "Available: list, show, default"
+    exit 1
+  end
+
+when "show"
+  if ARGV.empty?
+    puts "Usage: zillacore show <project-key>"
+    exit 1
+  end
+  show_project(ARGV[0])
+
+when "config"
+  OptionParser.new do |opts|
+    opts.banner = "Usage: zillacore config [options]"
+    opts.on("-s", "--server-url URL", "ZillaCore server URL")
+    opts.on("--show", "Show current configuration")
+  end.parse!(into: options)
+
+  configure_server(options)
+
+when "server", "s"
+  OptionParser.new do |opts|
+    opts.banner = "Usage: zillacore server [options]"
+    opts.on("-d", "--daemon", "Run server in background (detached)")
+  end.parse!(into: options)
+
+  start_server(daemon: options[:daemon])
+
+when "stop"
+  stop_server
+
+when "restart"
+  puts "Restarting ZillaCore server..."
+  wait_for_agents_to_finish if find_server_pid
+  if stop_server
+    # Wait a bit longer to ensure the process is fully dead
+    sleep 2
+
+    # Double-check that the process is really gone
+    if find_server_pid
+      puts "Warning: Old server process still running, forcing kill..."
+      pid = find_server_pid
+      begin
+        Process.kill("KILL", pid)
+        sleep 1
+      rescue Errno::ESRCH
+        # Already dead
+      end
+      FileUtils.rm_f(PID_FILE)
+    end
+  end
+
+  start_server(daemon: true)
+
+when "logs", "log"
+  # Tail the server log
+  log_file = File.join(ZILLACORE_ROOT, "tmp", "zillacore-server.log")
+
+  unless File.exist?(log_file)
+    puts "No log file found at #{log_file}"
+    puts "Is the server running? Check with: zillacore status"
+    exit 1
+  end
+
+  exec("tail", "-f", log_file)
+
+when "status"
+  pid = find_server_pid
+  if pid
+    puts "ZillaCore server is running (PID: #{pid})"
+  else
+    puts "ZillaCore server is not running"
+  end
+
+when "path"
+  puts ZILLACORE_DIR
+
+when "discord"
+  discord_cmd = ARGV.shift
+  discord_config_file = File.join(ZILLACORE_DIR, "discord.json")
+  agent_registry_file = File.join(ZILLACORE_DIR, "agents.json")
+
+  case discord_cmd
+  when "config"
+    if File.exist?(discord_config_file)
+      puts File.read(discord_config_file)
+    else
+      puts "No Discord config found at #{discord_config_file}"
+      puts "Create one with: zillacore discord map <channel-id> <project>"
+      puts "Or copy discord.json.example to #{discord_config_file}"
+    end
+
+  when "map"
+    channel_id = ARGV[0]
+    project_key = ARGV[1]
+
+    unless channel_id && project_key
+      puts "Usage: zillacore discord map <channel-id> <project-key>"
+      exit 1
+    end
+
+    config = File.exist?(discord_config_file) ? JSON.parse(File.read(discord_config_file)) : { "channel_mappings" => {} }
+    config["channel_mappings"] ||= {}
+    config["channel_mappings"][channel_id] = { "project" => project_key }
+
+    ensure_zillacore_dir
+    File.write(discord_config_file, JSON.pretty_generate(config))
+    puts "✓ Mapped channel #{channel_id} → project '#{project_key}'"
+
+  when "default"
+    project_key = ARGV[0]
+
+    unless project_key
+      puts "Usage: zillacore discord default <project-key>"
+      exit 1
+    end
+
+    config = File.exist?(discord_config_file) ? JSON.parse(File.read(discord_config_file)) : { "channel_mappings" => {} }
+    config["default_project"] = project_key
+
+    ensure_zillacore_dir
+    File.write(discord_config_file, JSON.pretty_generate(config))
+    puts "✓ Default project: #{project_key}"
+
+  when "token"
+    agent_key = ARGV[0]
+    token = ARGV[1]
+
+    unless agent_key && token
+      puts "Usage: zillacore discord token <agent-key> <bot-token>"
+      puts "  Sets the DISCORD_BOT_TOKEN env var for an agent in the registry."
+      puts "  Example: zillacore discord token galen Bot_TOKEN_HERE"
+      exit 1
+    end
+
+    registry = File.exist?(agent_registry_file) ? JSON.parse(File.read(agent_registry_file)) : {}
+    registry[agent_key] ||= {}
+    registry[agent_key]["env"] ||= {}
+    registry[agent_key]["env"]["DISCORD_BOT_TOKEN"] = token
+
+    ensure_zillacore_dir
+    File.write(agent_registry_file, JSON.pretty_generate(registry))
+    puts "✓ Set DISCORD_BOT_TOKEN for '#{agent_key}'"
+
+  when "status"
+    config = load_config
+    server_url = config["server_url"] || "http://localhost:4567"
+    begin
+      uri = URI("#{server_url}/api/discord")
+      response = Net::HTTP.get_response(uri)
+      data = JSON.parse(response.body)
+      if data["enabled"]
+        bots = data["bots"] || {}
+        if bots.empty?
+          puts "Discord: enabled but no bots configured"
+        else
+          puts "Discord bots:"
+          bots.each do |agent, info|
+            puts "  #{agent}: #{info["status"]} (user_id: #{info["user_id"] || "n/a"})"
+          end
+        end
+        puts "Default project: #{data.dig("config", "default_project") || "none"}"
+        puts "Channel mappings: #{data.dig("config", "channel_mappings")}"
+      else
+        puts "Discord: disabled (#{data["reason"]})"
+      end
+    rescue StandardError => e
+      puts "Could not reach server at #{server_url}: #{e.message}"
+      puts "Is the server running? Check with: zillacore status"
+    end
+
+  when "agents"
+    registry = File.exist?(agent_registry_file) ? JSON.parse(File.read(agent_registry_file)) : {}
+    agents_with_tokens = registry.select { |_k, v| v.is_a?(Hash) && (v.dig("env", "DISCORD_BOT_TOKEN") || v["discord_bot_token"]) }
+    if agents_with_tokens.empty?
+      puts "No agents have Discord bot tokens configured."
+      puts "Add one with: zillacore discord token <agent-key> <bot-token>"
+    else
+      puts "Agents with Discord bots:"
+      agents_with_tokens.each do |key, entry|
+        display = entry["fizzy_name"] || key.capitalize
+        token = entry.dig("env", "DISCORD_BOT_TOKEN") || entry["discord_bot_token"]
+        token_preview = "#{token[0..10]}..."
+        puts "  #{display} (#{key}): #{token_preview}"
+      end
+    end
+
+  when "owner"
+    discord_id = ARGV[0]
+    config = File.exist?(discord_config_file) ? JSON.parse(File.read(discord_config_file)) : {}
+    if discord_id
+      config["owner_discord_id"] = discord_id
+      ensure_zillacore_dir
+      File.write(discord_config_file, JSON.pretty_generate(config))
+      puts "✓ Owner set to #{discord_id}"
+    elsif config["owner_discord_id"]
+      puts "Owner: #{config["owner_discord_id"]}"
+    else
+      puts "No owner set."
+      puts "Usage: zillacore discord owner <discord-user-id>"
+    end
+
+  else
+    puts <<~HELP
+      Usage: zillacore discord <command>
+
+      Commands:
+        config                              Show Discord config
+        default <project>                   Set default project for all channels
+        map <channel-id> <project>          Map a specific channel to a project
+        owner [<discord-user-id>]           Set/show machine owner (for version notifications)
+        token <agent-key> <bot-token>       Set Discord bot token for an agent
+        agents                              List agents with Discord bot tokens
+        status                              Check Discord bot status (via server API)
+
+      Each agent gets its own Discord bot. Users @mention @Galen or @GLaDOS
+      directly in Discord — no shared bot needed.
+
+      Setup:
+        1. Create a Discord bot per agent at https://discord.com/developers/applications
+        2. Enable MESSAGE CONTENT intent in each bot's settings
+        3. Invite each bot with permissions: Send Messages, Create Public Threads,
+           Send Messages in Threads, Add Reactions, Read Message History
+        4. Register each bot token:
+           zillacore discord token galen "BOT_TOKEN_FOR_GALEN"
+           zillacore discord token glados "BOT_TOKEN_FOR_GLADOS"
+        5. Set a default project:
+           zillacore discord default marketplace
+        6. Start the server (all bots connect automatically):
+           zillacore server
+
+      Config file: #{discord_config_file}
+      Agent registry: #{agent_registry_file}
+    HELP
+  end
+
+when "card-map"
+  card_map_file = File.join(ZILLACORE_DIR, "card_map.json")
+  cm_cmd = ARGV.shift
+  case cm_cmd
+  when "clean"
+    unless File.exist?(card_map_file)
+      puts "No card_map.json found."
+      exit 0
+    end
+    map = JSON.parse(File.read(card_map_file))
+    before = map.size
+    # Remove entries with no valid worktree on disk
+    map.reject! { |_id, info| info["worktree"].nil? || !File.directory?(info["worktree"].to_s) }
+    after = map.size
+    removed = before - after
+    File.write(card_map_file, JSON.pretty_generate(map))
+    puts "Cleaned card map: removed #{removed} stale entries (#{before} → #{after})"
+  when "list", "ls", nil
+    unless File.exist?(card_map_file)
+      puts "No card_map.json found."
+      exit 0
+    end
+    map = JSON.parse(File.read(card_map_file))
+    if map.empty?
+      puts "Card map is empty."
+    else
+      map.each_value do |info|
+        num = info["number"] ? "##{info["number"]}" : "(no number)"
+        agent = info["agent"] || "(no agent)"
+        worktree_exists = info["worktree"] && File.directory?(info["worktree"].to_s) ? "✓" : "✗"
+        puts "#{num.ljust(8)} #{agent.ljust(18)} #{worktree_exists} #{info["worktree"] || "(none)"}"
+      end
+    end
+  else
+    puts "Usage: zillacore card-map [clean|list]"
+    puts "  clean   Remove stale entries (missing worktrees)"
+    puts "  list    Show all card map entries"
+  end
+
+when "brain"
+  brain_cmd = ARGV.shift
+  case brain_cmd
+  when "init"
+    agent = ARGV[0] || ENV.fetch("AI_AGENT_NAME", "Galen")
+    brain_init(agent)
+  when "status", "show"
+    agent = ARGV[0] || ENV.fetch("AI_AGENT_NAME", "Galen")
+    brain_status(agent)
+  when "search", "query"
+    scope = :knowledge
+    agent_name = ENV.fetch("AI_AGENT_NAME", "Galen")
+    if ARGV.include?("--persona")
+      ARGV.delete("--persona")
+      scope = :persona
+    end
+    if ARGV.include?("--agent")
+      idx = ARGV.index("--agent")
+      agent_name = ARGV.delete_at(idx + 1)
+      ARGV.delete_at(idx)
+    end
+    if ARGV.empty?
+      puts "Usage: zillacore brain search [--persona] [--agent <name>] <query>"
+      exit 1
+    end
+    brain_search(ARGV.join(" "), scope: scope, agent_name: agent_name)
+  when "list", "ls"
+    brain_list
+  when "path"
+    what = ARGV[0]
+    if what == "persona"
+      agent = ARGV[1] || ENV.fetch("AI_AGENT_NAME", "Galen")
+      puts persona_dir_for(agent)
+    else
+      puts KNOWLEDGE_DIR
+    end
+  else
+    puts <<~HELP
+      Usage: zillacore brain <command> [options]
+
+      Commands:
+        init [agent-name]                       Initialize brain (shared knowledge + agent persona)
+        status [agent-name]                     Show brain status and files
+        search [--persona] [--agent name] <q>   Search knowledge (default) or persona
+        list                                    List knowledge and all personas
+        path                                    Show knowledge directory
+        path persona [agent-name]               Show persona directory
+
+      The brain has two parts:
+        knowledge/  — shared across all agents (project conventions, patterns, lessons)
+        persona/    — per-agent (communication style, tone, personality)
+
+      Knowledge is automatically queried when agents do work.
+      Persona is only queried when agents write comments.
+
+      Examples:
+        zillacore brain init                    # Init for default agent
+        zillacore brain init Nova               # Init persona for Nova
+        zillacore brain search "ruby style"     # Search shared knowledge
+        zillacore brain search --persona "tone" # Search persona
+        zillacore brain list                    # List everything
+    HELP
+  end
+
+when "cron"
+  cron_cmd = ARGV.shift
+  config = load_config
+  server_url = config["server_url"] || "http://localhost:4567"
+
+  case cron_cmd
+  when "add", "create"
+    # Parse arguments
+    schedule = nil
+    agent = ENV.fetch("AI_AGENT_NAME", "Galen")
+    project = nil
+    model = nil
+    effort = nil
+    discord_channel_id = nil
+    forum_title = nil
+    repeat_count = nil
+    prompt = nil
+    script = nil
+
+    OptionParser.new do |opts|
+      opts.banner = "Usage: zillacore cron add [options] \"<prompt or --script path>\""
+      opts.on("-s", "--schedule EXPR", "Cron expression, @shorthand, or one-time schedule") { |v| schedule = v }
+      opts.on("-a", "--agent NAME", "Agent name (default: $AI_AGENT_NAME)") { |v| agent = v }
+      opts.on("-p", "--project KEY", "Project key") { |v| project = v }
+      opts.on("-m", "--model MODEL", "Model to use (opus, sonnet, haiku, auto)") { |v| model = v }
+      opts.on("-e", "--effort LEVEL", "Effort level (low, medium, high, xhigh, max)") { |v| effort = v }
+      opts.on("-d", "--discord CHANNEL_ID", "Discord channel ID to post results") { |v| discord_channel_id = v }
+      opts.on("-t", "--title TITLE", "Forum post title (for forum channels)") { |v| forum_title = v }
+      opts.on("-r", "--repeat COUNT", Integer, "Number of times to repeat (for recurring schedules)") { |v| repeat_count = v }
+      opts.on("--script PATH", "Run script directly (no agent, output to Discord)") { |v| script = v }
+    end.parse!
+
+    prompt = ARGV.join(" ") unless script
+
+    unless schedule && project && (prompt&.length&.> 0 || script)
+      puts "Error: Missing required arguments"
+      puts ""
+      puts "Usage examples:"
+      puts "  # Agent with prompt (recurring)"
+      puts "  zillacore cron add -s \"0 9 * * *\" -p marketplace \"Daily standup\""
+      puts ""
+      puts "  # Script mode (no agent, direct execution)"
+      puts "  zillacore cron add -s \"0 9 * * *\" -p zillacore --script ~/.zillacore/scripts/report.sh -d 1234567890"
+      puts ""
+      puts "  # Recurring (shorthand)"
+      puts "  zillacore cron add -s @daily -p zillacore \"Security audit\""
+      puts ""
+      puts "  # One-time (natural language)"
+      puts "  zillacore cron add -s \"tomorrow at 9am\" -p marketplace \"Reminder\""
+      puts "  zillacore cron add -s \"in 2 hours\" -p zillacore \"Follow up\""
+      puts "  zillacore cron add -s \"next monday at 3pm\" -p marketplace \"Weekly review\""
+      puts ""
+      puts "  # Recurring with repeat limit"
+      puts "  zillacore cron add -s \"0 9 * * *\" -r 7 -p marketplace \"Daily reminder for 7 days\""
+      puts "  zillacore cron add -s @daily -r 3 -p zillacore \"Reminder for 3 days\""
+      exit 1
+    end
+
+    # Generate ID from prompt or script
+    id = (script ? File.basename(script, ".*") : prompt).downcase.gsub(/[^a-z0-9]+/, "-")[0..30]
+
+    # Call server API
+    uri = URI("#{server_url}/api/cron/add")
+    req = Net::HTTP::Post.new(uri, "Content-Type" => "application/json")
+    payload = { id: id, schedule: schedule, agent: agent, project: project }
+    payload[:prompt] = prompt if prompt
+    payload[:script] = script if script
+    payload[:model] = model if model
+    payload[:effort] = effort if effort
+    payload[:discord_channel_id] = discord_channel_id if discord_channel_id
+    payload[:forum_title] = forum_title if forum_title
+    payload[:repeat_count] = repeat_count if repeat_count
+    req.body = payload.to_json
+
+    begin
+      response = Net::HTTP.start(uri.hostname, uri.port) { |http| http.request(req) }
+      data = JSON.parse(response.body)
+      if data["success"]
+        puts "✓ Cron job added: #{id}"
+        puts "  Schedule: #{schedule}"
+        puts "  Agent: #{script ? "none (script mode)" : agent}"
+        puts "  Project: #{project}"
+        puts "  Model: #{model || "default"}" unless script
+        puts "  Effort: #{effort || "default"}" unless script
+        puts "  Discord: #{discord_channel_id || "none"}"
+        puts "  Forum title: #{forum_title || "auto"}" if discord_channel_id
+        puts "  Repeat: #{repeat_count ? "#{repeat_count} times" : "unlimited"}"
+        puts script ? "  Script: #{script}" : "  Prompt: #{prompt}"
+      else
+        puts "Error: #{data["error"]}"
+        exit 1
+      end
+    rescue StandardError => e
+      puts "Could not reach server: #{e.message}"
+      puts "Is the server running? Check with: zillacore status"
+      exit 1
+    end
+
+  when "list", "ls"
+    begin
+      uri = URI("#{server_url}/api/cron")
+      response = Net::HTTP.get_response(uri)
+      data = JSON.parse(response.body)
+
+      if data["jobs"].empty?
+        puts "No cron jobs configured."
+        puts "Add one with: zillacore cron add -s \"0 9 * * *\" -p marketplace \"Daily summary\""
+        puts "Or one-time: zillacore cron add -s \"tomorrow at 9am\" -p marketplace \"Reminder\""
+      else
+        puts "Cron jobs:"
+        data["jobs"].each do |id, job|
+          status = job["enabled"] ? "✓" : "✗"
+          last_run = job["last_run"] ? Time.parse(job["last_run"]).strftime("%Y-%m-%d %H:%M") : "never"
+          execution_count = job["execution_count"] || 0
+
+          # Show one-time jobs differently
+          schedule_display = job["schedule"]
+          if job["parsed"] && job["parsed"]["one_time"]
+            target_time = Time.parse(job["parsed"]["timestamp"])
+            schedule_display = "#{job["schedule"]} (#{target_time.strftime("%Y-%m-%d %H:%M")})"
+            schedule_display += " [COMPLETED]" unless job["enabled"]
+          elsif job["repeat_count"]
+            schedule_display = "#{job["schedule"]} (#{execution_count}/#{job["repeat_count"]} runs)"
+            schedule_display += " [COMPLETED]" unless job["enabled"]
+          end
+
+          puts "  #{status} #{id}"
+          puts "    Schedule: #{schedule_display}"
+          puts "    Agent: #{job["script"] ? "none (script mode)" : job["agent"]} | Project: #{job["project"]}"
+          puts "    Discord: #{job["discord_channel_id"]}" if job["discord_channel_id"]
+          puts job["script"] ? "    Script: #{job["script"]}" : "    Prompt: #{job["prompt"]}"
+          puts "    Last run: #{last_run}"
+          puts
+        end
+      end
+    rescue StandardError => e
+      puts "Could not reach server: #{e.message}"
+      exit 1
+    end
+
+  when "remove", "rm", "delete"
+    id = ARGV[0]
+    unless id
+      puts "Usage: zillacore cron remove <job-id>"
+      exit 1
+    end
+
+    uri = URI("#{server_url}/api/cron/remove")
+    req = Net::HTTP::Post.new(uri, "Content-Type" => "application/json")
+    req.body = { id: id }.to_json
+
+    begin
+      response = Net::HTTP.start(uri.hostname, uri.port) { |http| http.request(req) }
+      data = JSON.parse(response.body)
+      if data["success"]
+        puts "✓ Removed cron job: #{id}"
+      else
+        puts "Error: #{data["error"]}"
+        exit 1
+      end
+    rescue StandardError => e
+      puts "Could not reach server: #{e.message}"
+      exit 1
+    end
+
+  when "enable"
+    id = ARGV[0]
+    unless id
+      puts "Usage: zillacore cron enable <job-id>"
+      exit 1
+    end
+
+    uri = URI("#{server_url}/api/cron/toggle")
+    req = Net::HTTP::Post.new(uri, "Content-Type" => "application/json")
+    req.body = { id: id, enabled: true }.to_json
+
+    begin
+      response = Net::HTTP.start(uri.hostname, uri.port) { |http| http.request(req) }
+      data = JSON.parse(response.body)
+      if data["success"]
+        puts "✓ Enabled cron job: #{id}"
+      else
+        puts "Error: #{data["error"]}"
+        exit 1
+      end
+    rescue StandardError => e
+      puts "Could not reach server: #{e.message}"
+      exit 1
+    end
+
+  when "disable"
+    id = ARGV[0]
+    unless id
+      puts "Usage: zillacore cron disable <job-id>"
+      exit 1
+    end
+
+    uri = URI("#{server_url}/api/cron/toggle")
+    req = Net::HTTP::Post.new(uri, "Content-Type" => "application/json")
+    req.body = { id: id, enabled: false }.to_json
+
+    begin
+      response = Net::HTTP.start(uri.hostname, uri.port) { |http| http.request(req) }
+      data = JSON.parse(response.body)
+      if data["success"]
+        puts "✓ Disabled cron job: #{id}"
+      else
+        puts "Error: #{data["error"]}"
+        exit 1
+      end
+    rescue StandardError => e
+      puts "Could not reach server: #{e.message}"
+      exit 1
+    end
+
+  when "update"
+    id = ARGV[0]
+    schedule = nil
+    discord_channel_id = nil
+    forum_title = nil
+
+    OptionParser.new do |opts|
+      opts.banner = "Usage: zillacore cron update <job-id> [options]"
+      opts.on("-s", "--schedule EXPR", "New cron expression") { |v| schedule = v }
+      opts.on("-c", "--channel CHANNEL_ID", "New Discord channel ID") { |v| discord_channel_id = v }
+      opts.on("-t", "--title TITLE", "New forum post title") { |v| forum_title = v }
+    end.parse!
+
+    unless id && (schedule || discord_channel_id || forum_title)
+      puts "Error: Missing required arguments"
+      puts "Usage: zillacore cron update <job-id> -s \"42 13 * * 1-5\""
+      puts "   or: zillacore cron update <job-id> -c \"1423854179880927274\""
+      puts "   or: zillacore cron update <job-id> -t \"Daily Update\""
+      puts "   or: zillacore cron update <job-id> -s \"42 13 * * 1-5\" -c \"1423854179880927274\""
+      exit 1
+    end
+
+    uri = URI("#{server_url}/api/cron/update")
+    req = Net::HTTP::Post.new(uri, "Content-Type" => "application/json")
+    payload = { id: id }
+    payload[:schedule] = schedule if schedule
+    payload[:discord_channel_id] = discord_channel_id if discord_channel_id
+    payload[:forum_title] = forum_title if forum_title
+    req.body = payload.to_json
+
+    begin
+      response = Net::HTTP.start(uri.hostname, uri.port) { |http| http.request(req) }
+      data = JSON.parse(response.body)
+      if data["success"]
+        puts "✓ Updated cron job: #{id}"
+        puts "  New schedule: #{schedule}" if schedule
+        puts "  New Discord channel: #{discord_channel_id}" if discord_channel_id
+        puts "  New forum title: #{forum_title}" if forum_title
+      else
+        puts "Error: #{data["error"]}"
+        exit 1
+      end
+    rescue StandardError => e
+      puts "Could not reach server: #{e.message}"
+      exit 1
+    end
+
+  else
+    puts <<~HELP
+      Usage: zillacore cron <command>
+
+      Commands:
+        add -s <schedule> -p <project> [-a <agent>] "<prompt>"
+                                        Add a new cron job
+        list                            List all cron jobs
+        remove <job-id>                 Remove a cron job
+        enable <job-id>                 Enable a cron job
+        disable <job-id>                Disable a cron job
+        update <job-id> [-s <schedule>] [-c <channel>]
+                                        Update a cron job's schedule and/or Discord channel
+
+      Schedule format:
+        Cron expression: "minute hour day month weekday"
+          Examples:
+            "0 9 * * 1-5"  — 9am on weekdays
+            "0 */4 * * *"  — Every 4 hours
+            "30 17 * * *"  — 5:30pm daily
+
+        Special strings:
+          @hourly   — Every hour (minute 0)
+          @daily    — Every day at midnight
+          @weekly   — Every Sunday at midnight
+          @monthly  — First day of month at midnight
+
+        One-time (natural language):
+          "tomorrow at 9am"
+          "in 2 hours"
+          "next monday at 3pm"
+      #{"    "}
+        One-time (ISO8601):
+          "2026-02-27T09:00:00-05:00"
+
+      Examples:
+        # Recurring
+        zillacore cron add -s "0 9 * * *" -p marketplace "Summarize yesterday's work"
+        zillacore cron add -s "@daily" -p zillacore -a GLaDOS "Run security audit"
+      #{"  "}
+        # One-time
+        zillacore cron add -s "tomorrow at 9am" -p marketplace "Reminder about priorities"
+        zillacore cron add -s "in 30 minutes" -p zillacore "Follow up on PR"
+      #{"  "}
+        # Management
+        zillacore cron list
+        zillacore cron update post-morning-message -s "42 13 * * 1-5"
+        zillacore cron disable daily-summary
+        zillacore cron remove daily-summary
+
+      Config file: #{ZILLACORE_DIR}/cron.json
+    HELP
+  end
+
+when "provider"
+  provider_cmd = ARGV.shift
+  providers_dir = File.join(ZILLACORE_DIR, "cli-providers")
+
+  case provider_cmd
+  when "list", "ls"
+    unless Dir.exist?(providers_dir)
+      puts "No providers configured. Run 'zillacore provider add <name>' to create one."
+      exit 0
+    end
+    files = Dir.glob(File.join(providers_dir, "*.json"))
+    if files.empty?
+      puts "No providers configured."
+    else
+      files.each do |f|
+        name = File.basename(f, ".json")
+        data = JSON.parse(File.read(f))
+        puts "#{name} — #{data["binary"]} (#{data["models"]&.size || 0} models)"
+      end
+    end
+
+  when "show"
+    name = ARGV[0]
+    unless name
+      puts "Usage: zillacore provider show <name>"
+      exit 1
+    end
+    file = File.join(providers_dir, "#{name}.json")
+    unless File.exist?(file)
+      puts "Provider '#{name}' not found."
+      exit 1
+    end
+    puts JSON.pretty_generate(JSON.parse(File.read(file)))
+
+  when "add", "create"
+    name = ARGV[0]
+    unless name
+      puts "Usage: zillacore provider add <name>"
+      exit 1
+    end
+    FileUtils.mkdir_p(providers_dir)
+    file = File.join(providers_dir, "#{name}.json")
+    if File.exist?(file)
+      puts "Provider '#{name}' already exists. Edit #{file} directly."
+      exit 1
+    end
+    scaffold = {
+      "binary" => name,
+      "default_args" => "",
+      "model_flag" => "--model",
+      "list_models_command" => "",
+      "models" => {}
+    }
+    File.write(file, JSON.pretty_generate(scaffold))
+    puts "Created #{file} — edit it to configure the provider."
+
+  else
+    puts <<~HELP
+      Usage: zillacore provider <command>
+
+      Commands:
+        list                 List configured CLI providers
+        show <name>          Show provider configuration
+        add <name>           Create a new provider config
+    HELP
+  end
+
+when "version", "--version", "-v"
+  puts "zillacore #{ZILLACORE_VERSION}"
+
+when "help", "--help", "-h", nil
+  puts <<~HELP
+    ZillaCore CLI - Manage projects with ZillaCore server
+
+    Usage:
+      zillacore setup                  Bootstrap a new machine (deps, dirs, configs)
+      zillacore server [options]       Start the ZillaCore webhook server (foreground)
+      zillacore stop                   Stop the running server
+      zillacore restart                Restart the server
+      zillacore logs                   Tail the server log
+      zillacore status                 Check if server is running
+      zillacore register [options]     Register current directory as a project
+      zillacore unregister <key>       Unregister a project
+      zillacore list                   List all registered projects
+      zillacore projects list          List all registered projects (alias)
+      zillacore projects default <key> Set the default project
+      zillacore show <key>             Show project configuration
+      zillacore brain <command>        Manage agent long-term memory (brain)
+      zillacore discord <command>      Manage the Discord bot
+      zillacore cron <command>         Manage scheduled agent tasks
+      zillacore provider <command>     Manage CLI providers
+      zillacore config                 Configure ZillaCore CLI
+      zillacore path                   Show ZillaCore config directory
+      zillacore version                Show version
+      zillacore help                   Show this help message
+
+    Server Options:
+      -d, --daemon                     Run server in background (detached)
+
+    Card Map Commands:
+      card-map list                    Show all card map entries
+      card-map clean                   Remove stale entries (missing worktrees)
+
+    Brain Commands:
+      brain init [agent]               Initialize brain (knowledge + persona)
+      brain status [agent]             Show brain status and files
+      brain search [--persona] <q>     Search knowledge or persona
+      brain list                       List knowledge and all personas
+      brain path                       Show knowledge directory
+
+    Cron Commands:
+      cron add -s <schedule> -p <project> "<prompt>"
+                                       Add a scheduled task
+      cron list                        List all cron jobs
+      cron remove <job-id>             Remove a cron job
+      cron enable <job-id>             Enable a cron job
+      cron disable <job-id>            Disable a cron job
+      cron update <job-id> -s <schedule>
+                                       Update a cron job's schedule
+
+    Discord Commands:
+      discord config                   Show Discord config
+      discord default <proj>           Set default project for all channels
+      discord map <ch> <proj>          Map a channel to a project
+      discord owner [<id>]             Set/show machine owner (version notifications)
+      discord token <agent> <token>    Set Discord bot token for an agent
+      discord agents                   List agents with Discord bot tokens
+      discord status                   Check bot status via server API
+
+    Provider Commands:
+      provider list                    List configured CLI providers
+      provider show <name>             Show provider configuration
+      provider add <name>              Create a new provider config
+
+    Examples:
+      # Start the server in the foreground (like rails server)
+      zillacore server
+      zillacore s
+    #{"  "}
+      # Start the server in background (detached)
+      zillacore server --daemon
+      zillacore server -d
+    #{"  "}
+      # Tail the server logs
+      zillacore logs
+    #{"  "}
+      # Restart the server
+      zillacore restart
+    #{"  "}
+      # Stop the server
+      zillacore stop
+    #{"  "}
+      # Check server status
+      zillacore status
+    #{"  "}
+      # Register current directory
+      cd ~/Code/my-project && zillacore register
+    #{"  "}
+      # Register with specific path
+      zillacore register --path ~/Code/my-project
+    #{"  "}
+      # List all projects
+      zillacore list
+      zillacore projects list  # alternative syntax
+    #{"  "}
+      # Set default project
+      zillacore projects default my-project
+    #{"  "}
+      # Unregister a project
+      zillacore unregister my-project
+    #{"  "}
+      # Show project details
+      zillacore show my-project
+    #{"  "}
+      # Initialize brain for your agent
+      zillacore brain init Galen
+    #{"  "}
+      # Search the brain
+      zillacore brain search "ruby conventions"
+
+    Configuration:
+      Projects are stored in: #{ZILLACORE_DIR}/projects.json
+      Server config: #{ZILLACORE_DIR}/config.json
+      Brain storage: #{ZILLACORE_DIR}/brain/
+  HELP
+
+else
+  puts "Unknown command: #{subcommand}"
+  puts "Run 'zillacore help' for usage information."
+  exit 1
+end

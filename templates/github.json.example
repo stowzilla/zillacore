@@ -1,0 +1,4 @@
+{
+  "webhook_secret": "your-github-webhook-secret",
+  "repos": {}
+}
