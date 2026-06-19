@@ -1031,13 +1031,11 @@ def handle_comment(payload)
       should_resume = resolved["resume_flag"]
 
       if should_resume
-        card_context = prefetch_card_context(card_number, repo_path: worktree_path, agent_name: agent_name)
         prompt = render_resume_prompt(
           comment_body: plain_text,
           comment_creator: comment_vars["COMMENT_CREATOR"],
           comment_id: comment_id,
           card_number: card_number,
-          card_context: card_context,
           agent_name: agent_name
         )
         LOG.info "[Resume] Using lean prompt for mention on card #{card_number || card_internal_id} (#{resolved["agent_cli"]})"
@@ -1227,15 +1225,13 @@ def dispatch_followup_comment(card_key:, card_number:, card_internal_id:, work_d
   should_resume = is_worktree && resolved["resume_flag"]
 
   if should_resume
-    # Lean prompt: only the new comment + fresh card context. The previous session
+    # Lean prompt: only the new comment. The previous session
     # already has role, persona, knowledge, core instructions, and card history.
-    card_context = prefetch_card_context(card_number, repo_path: work_dir, agent_name: agent_name)
     prompt = render_resume_prompt(
       comment_body: plain_text,
       comment_creator: comment_vars["COMMENT_CREATOR"],
       comment_id: comment_id,
       card_number: card_number,
-      card_context: card_context,
       agent_name: agent_name
     )
     LOG.info "[Resume] Using lean prompt for follow-up on card #{card_number || card_internal_id} (#{resolved["agent_cli"]})"
