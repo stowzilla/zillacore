@@ -32,6 +32,24 @@ DISCORD_ALL_READY_LOGGED = { done: false }
 DISCORD_SHARED_THREADS = {}
 DISCORD_SHARED_THREADS_MUTEX = Mutex.new
 
+# Discord thread worktree map: tracks worktrees created for Discord thread conversations.
+# Keyed by "agent_key:channel_id" → { worktree, branch, project, created_at }
+# Persisted to disk so sessions survive restarts.
+DISCORD_THREAD_MAP_FILE = File.join(BRAINIAC_DIR, "discord_thread_map.json")
+DISCORD_THREAD_MAP_MUTEX = Mutex.new
+
+def load_discord_thread_map
+  return {} unless File.exist?(DISCORD_THREAD_MAP_FILE)
+
+  JSON.parse(File.read(DISCORD_THREAD_MAP_FILE))
+rescue JSON::ParserError
+  {}
+end
+
+def save_discord_thread_map(map)
+  File.write(DISCORD_THREAD_MAP_FILE, JSON.pretty_generate(map))
+end
+
 # Brainiac restart queue: when an agent works on brainiac itself, queue a restart
 # instead of doing it immediately. A background thread checks every 30s and only
 # restarts when no other agents are running, preventing mid-session kills.
@@ -721,6 +739,9 @@ def handle_discord_message(message, agent_key, bot_token, bot_user_id)
   # Strip effort tag (e.g. [effort:high]) from prompt content
   clean_content_for_prompt = clean_content_for_prompt.sub(/\[effort:\w+\]/i, "").strip
 
+  # Strip CLI provider tag (e.g. [cli:grok]) from prompt content
+  clean_content_for_prompt = clean_content_for_prompt.sub(/\[cli:\w+\]/i, "").strip
+
   # Find project: inline override > channel mapping > default_project
   if inline_project_key && PROJECTS.key?(inline_project_key)
     project_key = inline_project_key
@@ -836,7 +857,74 @@ def handle_discord_message(message, agent_key, bot_token, bot_user_id)
 
   brain_context = build_brain_context(agent_name: agent_name, card_title: clean_content, comment_body: clean_content)
 
-  if planning_info
+  # --- Thread worktree management & session resume ---
+  # For threads with a project, manage a dedicated worktree per agent+thread.
+  # On subsequent dispatches, resume the prior session with a lean prompt.
+  should_resume = false
+  thread_worktree_path = nil
+  thread_map_key = "#{agent_key}:#{channel_id}"
+
+  if is_thread && project_config
+    repo_path = project_config["repo_path"]
+    thread_map = DISCORD_THREAD_MAP_MUTEX.synchronize { load_discord_thread_map }
+    existing = thread_map[thread_map_key]
+
+    if existing && File.directory?(existing["worktree"])
+      # Existing worktree — resume session
+      thread_worktree_path = existing["worktree"]
+      resolved_for_resume = resolve_project_cli_config(project_config, cli_provider_override: detect_cli_provider(text: clean_content), agent_name: agent_name)
+      should_resume = !!resolved_for_resume["resume_flag"]
+      LOG.info "[Discord:#{agent_name}] Reusing thread worktree at #{thread_worktree_path} (resume: #{should_resume})"
+    else
+      # First dispatch in this thread — create worktree
+      thread_slug = channel_id[-8..]
+      branch = "discord-#{agent_key}-#{thread_slug}"
+      thread_worktree_path = File.join(File.dirname(repo_path), "#{File.basename(repo_path)}--#{branch}")
+
+      debounced_repo_fetch(repo_path)
+      default_branch = get_default_branch(repo_path)
+
+      branch_exists = system("git", "rev-parse", "--verify", branch, chdir: repo_path, out: File::NULL, err: File::NULL)
+
+      if branch_exists
+        worktree_list = run_cmd("git", "worktree", "list", "--porcelain", chdir: repo_path)
+        has_worktree = worktree_list.lines.any? { |l| l.strip == "worktree #{thread_worktree_path}" }
+        if has_worktree && File.directory?(thread_worktree_path)
+          LOG.info "[Discord:#{agent_name}] Reusing existing worktree at #{thread_worktree_path}"
+        else
+          run_cmd("git", "worktree", "add", thread_worktree_path, branch, chdir: repo_path)
+        end
+      else
+        run_cmd("git", "worktree", "add", "-b", branch, thread_worktree_path, "origin/#{default_branch}", chdir: repo_path)
+      end
+
+      trust_version_manager(thread_worktree_path, chdir: thread_worktree_path)
+      apply_worktree_includes(repo_path, thread_worktree_path)
+      run_project_hook(repo_path, "worktree-setup", extra_env: { "WORKTREE_PATH" => thread_worktree_path })
+
+      DISCORD_THREAD_MAP_MUTEX.synchronize do
+        map = load_discord_thread_map
+        map[thread_map_key] = { "worktree" => thread_worktree_path, "branch" => branch,
+                                "project" => PROJECTS.find { |_k, v| v == project_config }&.first,
+                                "channel_id" => channel_id, "created_at" => Time.now.iso8601 }
+        save_discord_thread_map(map)
+      end
+      LOG.info "[Discord:#{agent_name}] Created thread worktree at #{thread_worktree_path}"
+    end
+  end
+
+  if should_resume && thread_worktree_path
+    # Lean resume prompt — prior session has full context
+    prompt = render_discord_resume_prompt(
+      message_body: clean_content_for_prompt,
+      discord_user: discord_user,
+      channel_history: channel_history,
+      response_file: response_file,
+      agent_name: agent_name,
+      card_id: card_id
+    )
+    LOG.info "[Discord:#{agent_name}] Using resume prompt for thread #{channel_id}"
+  elsif planning_info
     # Planning mode — use planning prompt
     planning_card_id = planning_info[:card_id]
     LOG.info "[Discord:#{agent_name}] Planning mode detected for #{discord_user}"
@@ -875,7 +963,7 @@ def handle_discord_message(message, agent_key, bot_token, bot_user_id)
                            channel: :discord)
   end
 
-  work_dir = project_config ? project_config["repo_path"] : Dir.pwd
+  work_dir = thread_worktree_path || (project_config ? project_config["repo_path"] : Dir.pwd)
 
   prompt_file = File.join(response_dir, "discord-prompt-#{timestamp}-#{agent_key}-#{message_id}.md")
   File.write(prompt_file, prompt)
@@ -900,23 +988,32 @@ def handle_discord_message(message, agent_key, bot_token, bot_user_id)
   # Detect effort override — [effort:high] syntax
   effort = project_config ? detect_effort(project_config, text: clean_content) : nil
 
+  # Detect CLI provider override — [cli:grok] syntax
+  cli_provider_override = detect_cli_provider(text: clean_content)
+
   agent_config_name = agent_key.downcase.gsub(/[^a-z0-9-]/, "-")
   log_file = File.join(response_dir, "discord-agent-#{timestamp}-#{agent_key}-#{message_id}.log")
 
-  resolved = project_config ? resolve_project_cli_config(project_config) : {}
+  resolved = project_config ? resolve_project_cli_config(project_config, cli_provider_override: cli_provider_override, agent_name: agent_name) : {}
   agent_cli = resolved["agent_cli"] || "kiro-cli"
   agent_cli_args = resolved["agent_cli_args"] || "chat --trust-all-tools --no-interactive"
   agent_model_flag = resolved["agent_model_flag"] || "--model"
   agent_effort_flag = resolved["agent_effort_flag"] || "--effort"
+  agent_flag = resolved.key?("agent_flag") ? resolved["agent_flag"] : "--agent"
+  prompt_mode = resolved["prompt_mode"] || "stdin"
 
   cmd = [agent_cli]
-  cmd.push("--agent", agent_config_name)
+  cmd.push(agent_flag, agent_config_name) if agent_flag
   cmd.concat(agent_cli_args.split)
-  add_trust_tools!(cmd, agent_cli_args)
-  cmd.push(agent_model_flag, model) if agent_model_flag && !agent_model_flag.empty? && model
+  if model && agent_model_flag && !agent_model_flag.empty?
+    allowed = resolved["allowed_models"] || {}
+    cmd.push(agent_model_flag, model) if allowed.value?(model) || allowed.key?(model)
+  end
   cmd.push(agent_effort_flag, effort) if agent_effort_flag && !agent_effort_flag.empty? && effort
+  cmd.push(resolved["resume_flag"]) if should_resume && resolved["resume_flag"]
+  cmd.push(resolved["prompt_flag"], prompt_file) if prompt_mode == "flag" && resolved["prompt_flag"]
 
-  LOG.info "[Discord:#{agent_name}] Dispatching for #{discord_user} (model: #{model || "default"}, effort: #{effort || "default"}), tail -f #{log_file}"
+  LOG.info "[Discord:#{agent_name}] Dispatching for #{discord_user} (model: #{model || "default"}, effort: #{effort || "default"}, cli: #{agent_cli}#{", resuming" if should_resume}), tail -f #{log_file}"
   LOG.info "[Discord:#{agent_name}] Command: #{cmd.join(" ")}"
 
   spawn_env = {}
@@ -938,7 +1035,7 @@ def handle_discord_message(message, agent_key, bot_token, bot_user_id)
 
   pid = spawn(spawn_env, *cmd,
               chdir: work_dir,
-              in: prompt_file,
+              **(prompt_mode == "stdin" ? { in: prompt_file } : {}),
               out: [log_file, "w"],
               err: %i[child out])
 
