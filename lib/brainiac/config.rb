@@ -23,11 +23,11 @@ AI_AGENT_NAME = ENV.fetch("AI_AGENT_NAME") do
   end
 end
 
-BRAINIAC_DIR   = ENV.fetch("BRAINIAC_DIR", File.join(Dir.home, ".brainiac"))
-PROJECTS_FILE   = File.join(BRAINIAC_DIR, "projects.json")
+BRAINIAC_DIR = ENV.fetch("BRAINIAC_DIR", File.join(Dir.home, ".brainiac"))
+PROJECTS_FILE = File.join(BRAINIAC_DIR, "projects.json")
 KIRO_AGENTS_DIR = File.join(Dir.home, ".kiro", "agents")
 CARD_MAP_FILE   = File.join(BRAINIAC_DIR, "card_map.json")
-AGENT_TOKENS_FILE   = File.join(BRAINIAC_DIR, "agent_tokens.json")
+AGENT_TOKENS_FILE = File.join(BRAINIAC_DIR, "agent_tokens.json")
 AGENT_REGISTRY_FILE = File.join(BRAINIAC_DIR, "agents.json")
 
 LOG_LEVEL = ENV.fetch("LOG_LEVEL", "info").downcase
