@@ -32,7 +32,7 @@ DISCORD_ALL_READY_LOGGED = { done: false }
 DISCORD_SHARED_THREADS = {}
 DISCORD_SHARED_THREADS_MUTEX = Mutex.new
 
-# Zillacore restart queue: when an agent works on brainiac itself, queue a restart
+# Brainiac restart queue: when an agent works on brainiac itself, queue a restart
 # instead of doing it immediately. A background thread checks every 30s and only
 # restarts when no other agents are running, preventing mid-session kills.
 # Using a hash instead of a constant to allow mutation inside synchronize blocks

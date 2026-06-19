@@ -695,7 +695,7 @@ if DISCORD_ENABLED
       ready = DISCORD_BOTS_MUTEX.synchronize { DISCORD_BOTS.any? { |_, info| info[:status] == "ready" } }
       next unless ready
 
-      send_restart_notification("✅ Zillacore back online")
+      send_restart_notification("✅ Brainiac back online")
 
       # Check if running an outdated version (skip in dev/foreground mode)
       unless $stdout.tty?
@@ -708,7 +708,7 @@ if DISCORD_ENABLED
           token = tokens.values.first
           if channel_id && token
             send_discord_message(channel_id,
-                                 "#{mention}: Zillacore was updated and needs to be pulled down (#{version_info[:commits_behind]} commit#{"s" if version_info[:commits_behind] != 1} behind, running #{version_info[:local_sha]} vs #{version_info[:remote_sha]})",
+                                 "#{mention}: Brainiac was updated and needs to be pulled down (#{version_info[:commits_behind]} commit#{"s" if version_info[:commits_behind] != 1} behind, running #{version_info[:local_sha]} vs #{version_info[:remote_sha]})",
                                  token: token)
           end
         end
