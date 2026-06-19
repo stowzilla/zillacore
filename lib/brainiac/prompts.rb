@@ -618,3 +618,69 @@ def render_prompt(template, vars = {}, brain_context: "", card_context: "", agen
   vars.each { |key, val| result.gsub!("{{#{key}}}", val.to_s) }
   result
 end
+
+# Lean prompt for resumed sessions. The previous session already has the full context
+# (role, persona, knowledge, core instructions, channel prompts). We only send the new
+# comment and any fresh card context so the agent knows what changed.
+def render_resume_prompt(comment_body:, comment_creator:, comment_id:, card_number: nil, card_context: "", agent_name: AI_AGENT_NAME)
+  # Touch memory file (same as render_prompt does)
+  memory_dir = memory_dir_for(agent_name)
+  card_id = card_number || "unknown"
+  memory_file = File.join(memory_dir, "card-#{card_id}.md")
+  FileUtils.mkdir_p(memory_dir)
+  FileUtils.touch(memory_file)
+
+  lines = []
+  lines << "## Resumed Session — New Follow-up Comment"
+  lines << ""
+  lines << "This is a continuation of your previous session on this card."
+  lines << "All prior context, instructions, and your previous work are still in this conversation."
+  lines << ""
+
+  unless card_context.empty?
+    lines << "### Latest Card Context (may include new comments since your last session)"
+    lines << card_context
+    lines << ""
+  end
+
+  lines << "### New Comment from #{comment_creator} (comment ID: #{comment_id})"
+  lines << ""
+  lines << comment_body
+  lines << ""
+  lines << "---"
+  lines << "Respond to this comment. All your previous instructions still apply (memory, pre-post check, one comment per session, etc.)."
+
+  lines.join("\n")
+end
+
+# Lean resume prompt for Discord threads. The previous session has full context
+# (role, persona, knowledge, instructions). We only send the new message + channel history.
+def render_discord_resume_prompt(message_body:, discord_user:, channel_history:, response_file:, agent_name: AI_AGENT_NAME, card_id: nil)
+  memory_dir = memory_dir_for(agent_name)
+  if card_id
+    memory_file = File.join(memory_dir, "card-#{card_id}.md")
+    FileUtils.mkdir_p(memory_dir)
+    FileUtils.touch(memory_file)
+  end
+
+  lines = []
+  lines << "## Resumed Session — New Discord Message"
+  lines << ""
+  lines << "This is a continuation of your previous session in this thread."
+  lines << "All prior context, instructions, and your previous work are still in this conversation."
+  lines << ""
+  lines << "### Recent Channel History"
+  lines << "```"
+  lines << channel_history
+  lines << "```"
+  lines << ""
+  lines << "### New Message from #{discord_user}"
+  lines << ""
+  lines << message_body
+  lines << ""
+  lines << "---"
+  lines << "**IMPORTANT: Write your response to `#{response_file}`. Do NOT reply via stdout.**"
+  lines << "All your previous instructions still apply (memory, persona, one message per session, etc.)."
+
+  lines.join("\n")
+end
