@@ -1,13 +1,13 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
-# ZillaCore Waybar Config Updater
+# Brainiac Waybar Config Updater
 # Dynamically updates waybar config with per-agent modules
 
 require "json"
 
 WAYBAR_CONFIG = File.expand_path("~/.config/waybar/config.jsonc")
-WAYBAR_SCRIPT = File.expand_path("~/Code/zillacore/monitor/waybar.rb")
+WAYBAR_SCRIPT = File.expand_path("~/Code/brainiac/monitor/waybar.rb")
 
 def load_config
   content = File.read(WAYBAR_CONFIG)
@@ -20,7 +20,7 @@ def save_config(config)
   File.write(WAYBAR_CONFIG, JSON.pretty_generate(config))
 end
 
-def zillacore_modules
+def brainiac_modules
   output = `#{WAYBAR_SCRIPT} --config`
   JSON.parse(output)
 end
@@ -28,20 +28,20 @@ end
 # Load current config
 config = load_config
 
-# Get dynamic ZillaCore modules
-zillacore_data = zillacore_modules
-modules = zillacore_data["modules"]
-module_configs = zillacore_data["config"]
+# Get dynamic Brainiac modules
+brainiac_data = brainiac_modules
+modules = brainiac_data["modules"]
+module_configs = brainiac_data["config"]
 
-# Remove old zillacore modules and groups from modules-right
-config["modules-right"].reject! { |m| m.to_s.start_with?("custom/zillacore") || m.to_s == "group/zillacore-agents" }
+# Remove old brainiac modules and groups from modules-right
+config["modules-right"].reject! { |m| m.to_s.start_with?("custom/brainiac") || m.to_s == "group/brainiac-agents" }
 
 # Insert new modules at the beginning of modules-right
 config["modules-right"] = modules + config["modules-right"]
 
-# Remove old zillacore module configs and groups
+# Remove old brainiac module configs and groups
 config.each_key do |key|
-  config.delete(key) if key.to_s.start_with?("custom/zillacore") || key.to_s == "group/zillacore-agents"
+  config.delete(key) if key.to_s.start_with?("custom/brainiac") || key.to_s == "group/brainiac-agents"
 end
 
 # Add new module configs

@@ -11,7 +11,7 @@ require "uri"
 # --- Version ---
 
 require_relative "version"
-ZILLACORE_VERSION = ZillaCore::VERSION
+BRAINIAC_VERSION = Brainiac::VERSION
 
 # --- Environment & paths ---
 
@@ -23,12 +23,12 @@ AI_AGENT_NAME = ENV.fetch("AI_AGENT_NAME") do
   end
 end
 
-ZILLACORE_DIR   = ENV.fetch("ZILLACORE_DIR", File.join(Dir.home, ".zillacore"))
-PROJECTS_FILE   = File.join(ZILLACORE_DIR, "projects.json")
+BRAINIAC_DIR   = ENV.fetch("BRAINIAC_DIR", File.join(Dir.home, ".brainiac"))
+PROJECTS_FILE   = File.join(BRAINIAC_DIR, "projects.json")
 KIRO_AGENTS_DIR = File.join(Dir.home, ".kiro", "agents")
-CARD_MAP_FILE   = File.join(ZILLACORE_DIR, "card_map.json")
-AGENT_TOKENS_FILE   = File.join(ZILLACORE_DIR, "agent_tokens.json")
-AGENT_REGISTRY_FILE = File.join(ZILLACORE_DIR, "agents.json")
+CARD_MAP_FILE   = File.join(BRAINIAC_DIR, "card_map.json")
+AGENT_TOKENS_FILE   = File.join(BRAINIAC_DIR, "agent_tokens.json")
+AGENT_REGISTRY_FILE = File.join(BRAINIAC_DIR, "agents.json")
 
 LOG_LEVEL = ENV.fetch("LOG_LEVEL", "info").downcase
 LOG = Logger.new($stdout)
@@ -42,16 +42,16 @@ LOG.level = case LOG_LEVEL
 
 # --- Brain paths ---
 
-BRAIN_BASE_DIR       = File.join(ZILLACORE_DIR, "brain")
+BRAIN_BASE_DIR       = File.join(BRAINIAC_DIR, "brain")
 KNOWLEDGE_DIR        = File.join(BRAIN_BASE_DIR, "knowledge")
 PERSONA_BASE_DIR     = File.join(BRAIN_BASE_DIR, "persona")
-MEMORY_BASE_DIR      = File.join(ZILLACORE_DIR, "brain", "memory")
+MEMORY_BASE_DIR      = File.join(BRAINIAC_DIR, "brain", "memory")
 MEMORY_FILE_TEMPLATE = "card-{{CARD_ID}}.md"
-KNOWLEDGE_COLLECTION = "zillacore-knowledge"
+KNOWLEDGE_COLLECTION = "brainiac-knowledge"
 
 # --- Fizzy auth ---
 
-FIZZY_CONFIG_FILE = File.join(ZILLACORE_DIR, "fizzy.json")
+FIZZY_CONFIG_FILE = File.join(BRAINIAC_DIR, "fizzy.json")
 
 def load_fizzy_config
   return {} unless File.exist?(FIZZY_CONFIG_FILE)
@@ -66,7 +66,7 @@ FIZZY_CONFIG = load_fizzy_config
 
 # --- GitHub auth ---
 
-GITHUB_CONFIG_FILE = File.join(ZILLACORE_DIR, "github.json")
+GITHUB_CONFIG_FILE = File.join(BRAINIAC_DIR, "github.json")
 
 def load_github_config
   return {} unless File.exist?(GITHUB_CONFIG_FILE)
@@ -219,33 +219,33 @@ end
 
 # --- Version check ---
 
-# Check if local zillacore is behind origin/master.
+# Check if local brainiac is behind origin/master.
 # Returns { behind: true, local_sha:, remote_sha:, commits_behind: } or { behind: false }
-def check_zillacore_version
-  zillacore_dir = File.join(__dir__, "..", "..")
+def check_brainiac_version
+  brainiac_dir = File.join(__dir__, "..", "..")
 
   # Fetch latest from origin (quiet, don't fail if offline)
-  _, _, status = Open3.capture3("git", "fetch", "origin", "master", "--quiet", chdir: zillacore_dir)
+  _, _, status = Open3.capture3("git", "fetch", "origin", "master", "--quiet", chdir: brainiac_dir)
   unless status.success?
     LOG.warn "[Version] Could not fetch origin/master — skipping version check"
     return { behind: false }
   end
 
-  local_sha, = Open3.capture3("git", "rev-parse", "HEAD", chdir: zillacore_dir)
-  remote_sha, = Open3.capture3("git", "rev-parse", "origin/master", chdir: zillacore_dir)
+  local_sha, = Open3.capture3("git", "rev-parse", "HEAD", chdir: brainiac_dir)
+  remote_sha, = Open3.capture3("git", "rev-parse", "origin/master", chdir: brainiac_dir)
   local_sha = local_sha.strip
   remote_sha = remote_sha.strip
 
   return { behind: false } if local_sha == remote_sha
 
-  count, = Open3.capture3("git", "rev-list", "--count", "HEAD..origin/master", chdir: zillacore_dir)
+  count, = Open3.capture3("git", "rev-list", "--count", "HEAD..origin/master", chdir: brainiac_dir)
   { behind: true, local_sha: local_sha[0..6], remote_sha: remote_sha[0..6], commits_behind: count.strip.to_i }
 end
 
 # Discord user ID of the machine owner (for version-outdated notifications).
 # Reads from discord.json (Discord-scoped config).
 def owner_discord_id
-  discord_file = File.join(ZILLACORE_DIR, "discord.json")
+  discord_file = File.join(BRAINIAC_DIR, "discord.json")
   return nil unless File.exist?(discord_file)
 
   JSON.parse(File.read(discord_file))["owner_discord_id"]
@@ -256,7 +256,7 @@ end
 # --- Dashboard auth ---
 
 DASHBOARD_TOKEN = begin
-  discord_file = File.join(ZILLACORE_DIR, "discord.json")
+  discord_file = File.join(BRAINIAC_DIR, "discord.json")
   JSON.parse(File.read(discord_file))["dashboard_token"] if File.exist?(discord_file)
 rescue JSON::ParserError
   nil

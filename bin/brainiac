@@ -8,19 +8,19 @@ require "net/http"
 require "uri"
 require "time"
 
-# ZillaCore CLI - Register and manage projects with ZillaCore server
+# Brainiac CLI - Register and manage projects with Brainiac server
 
-ZILLACORE_ROOT = File.expand_path("..", __dir__)
-require_relative "../lib/zillacore/version"
-ZILLACORE_VERSION = ZillaCore::VERSION
+BRAINIAC_ROOT = File.expand_path("..", __dir__)
+require_relative "../lib/brainiac/version"
+BRAINIAC_VERSION = Brainiac::VERSION
 
-ZILLACORE_DIR = File.join(Dir.home, ".zillacore")
-PROJECTS_FILE = File.join(ZILLACORE_DIR, "projects.json")
-CONFIG_FILE = File.join(ZILLACORE_DIR, "config.json")
-PID_FILE = File.join(ZILLACORE_DIR, "server.pid")
+BRAINIAC_DIR = File.join(Dir.home, ".brainiac")
+PROJECTS_FILE = File.join(BRAINIAC_DIR, "projects.json")
+CONFIG_FILE = File.join(BRAINIAC_DIR, "config.json")
+PID_FILE = File.join(BRAINIAC_DIR, "server.pid")
 
-def ensure_zillacore_dir
-  FileUtils.mkdir_p(ZILLACORE_DIR)
+def ensure_brainiac_dir
+  FileUtils.mkdir_p(BRAINIAC_DIR)
 end
 
 def load_projects
@@ -32,7 +32,7 @@ rescue JSON::ParserError
 end
 
 def save_projects(projects)
-  ensure_zillacore_dir
+  ensure_brainiac_dir
   File.write(PROJECTS_FILE, JSON.pretty_generate(projects))
 end
 
@@ -45,7 +45,7 @@ rescue JSON::ParserError
 end
 
 def save_config(config)
-  ensure_zillacore_dir
+  ensure_brainiac_dir
   File.write(CONFIG_FILE, JSON.pretty_generate(config))
 end
 
@@ -134,14 +134,14 @@ def stop_server
   pid = find_server_pid
 
   unless pid
-    puts "No running ZillaCore server found."
+    puts "No running Brainiac server found."
     return false
   end
 
-  puts "Stopping ZillaCore server (PID: #{pid})..."
+  puts "Stopping Brainiac server (PID: #{pid})..."
 
   # Also stop the monitor daemon
-  daemon_pid_file = "/tmp/zillacore-daemon.pid"
+  daemon_pid_file = "/tmp/brainiac-daemon.pid"
   if File.exist?(daemon_pid_file)
     daemon_pid = File.read(daemon_pid_file).strip.to_i
     begin
@@ -188,9 +188,9 @@ def stop_server
 end
 
 def start_server(daemon: false)
-  # Resolve the real path of the zillacore script (follows symlinks)
-  receiver_path = File.join(ZILLACORE_ROOT, "receiver.rb")
-  receiver_dir = ZILLACORE_ROOT
+  # Resolve the real path of the brainiac script (follows symlinks)
+  receiver_path = File.join(BRAINIAC_ROOT, "receiver.rb")
+  receiver_dir = BRAINIAC_ROOT
 
   unless File.exist?(receiver_path)
     puts "Error: receiver.rb not found at #{receiver_path}"
@@ -199,8 +199,8 @@ def start_server(daemon: false)
 
   # Check if already running
   if find_server_pid
-    puts "Error: ZillaCore server is already running."
-    puts "Run 'zillacore stop' or 'zillacore restart' to manage it."
+    puts "Error: Brainiac server is already running."
+    puts "Run 'brainiac stop' or 'brainiac restart' to manage it."
     exit 1
   end
 
@@ -208,9 +208,9 @@ def start_server(daemon: false)
     # Daemon mode: start in background (like the old behavior)
     log_dir = File.join(receiver_dir, "tmp")
     FileUtils.mkdir_p(log_dir)
-    log_file = File.join(log_dir, "zillacore-server.log")
+    log_file = File.join(log_dir, "brainiac-server.log")
 
-    puts "Starting ZillaCore server (daemon)..."
+    puts "Starting Brainiac server (daemon)..."
 
     pid = spawn("ruby", receiver_path,
                 chdir: receiver_dir,
@@ -218,23 +218,23 @@ def start_server(daemon: false)
                 err: %i[child out])
     Process.detach(pid)
 
-    ensure_zillacore_dir
+    ensure_brainiac_dir
     File.write(PID_FILE, pid.to_s)
-    File.write(File.join(ZILLACORE_DIR, "server.root"), receiver_dir)
+    File.write(File.join(BRAINIAC_DIR, "server.root"), receiver_dir)
 
     puts "✓ Server started in background (PID: #{pid})"
     puts "  Logs: tail -f #{log_file}"
-    puts "  Stop: zillacore stop"
-    puts "  Restart: zillacore restart"
+    puts "  Stop: brainiac stop"
+    puts "  Restart: brainiac restart"
   else
     # Foreground mode (default): run in the current process like `rails server`
-    puts "Starting ZillaCore server (pid: #{Process.pid})..."
+    puts "Starting Brainiac server (pid: #{Process.pid})..."
     puts "  Stop: Ctrl+C"
     puts ""
 
-    ensure_zillacore_dir
+    ensure_brainiac_dir
     File.write(PID_FILE, Process.pid.to_s)
-    File.write(File.join(ZILLACORE_DIR, "server.root"), receiver_dir)
+    File.write(File.join(BRAINIAC_DIR, "server.root"), receiver_dir)
 
     begin
       Dir.chdir(receiver_dir) do
@@ -354,7 +354,7 @@ def list_projects
 
   if projects.empty?
     puts "No projects registered."
-    puts "Run 'zillacore register' from a project directory to get started."
+    puts "Run 'brainiac register' from a project directory to get started."
     return
   end
 
@@ -396,7 +396,7 @@ def configure_server(options)
 
   # Interactive configuration
   current_url = config["server_url"] || "http://localhost:4567"
-  print "ZillaCore server URL [#{current_url}]: "
+  print "Brainiac server URL [#{current_url}]: "
   server_url = $stdin.gets.chomp
   config["server_url"] = server_url.empty? ? current_url : server_url
 
@@ -406,11 +406,11 @@ end
 
 # --- Brain management ---
 
-BRAIN_BASE_DIR   = File.join(ZILLACORE_DIR, "brain")
+BRAIN_BASE_DIR   = File.join(BRAINIAC_DIR, "brain")
 KNOWLEDGE_DIR    = File.join(BRAIN_BASE_DIR, "knowledge")
 PERSONA_BASE_DIR = File.join(BRAIN_BASE_DIR, "persona")
 MEMORY_BASE_DIR  = File.join(BRAIN_BASE_DIR, "memory")
-KNOWLEDGE_COLLECTION = "zillacore-knowledge".freeze
+KNOWLEDGE_COLLECTION = "brainiac-knowledge".freeze
 
 def memory_dir_for(agent_name)
   File.join(MEMORY_BASE_DIR, agent_name.downcase.gsub(/[^a-z0-9-]/, "-"))
@@ -441,7 +441,7 @@ def brain_init(agent_name)
     puts "⚠  qmd is not installed. Install it to enable semantic search:"
     puts "   npm install -g @tobilu/qmd"
     puts ""
-    puts "Then run: zillacore brain init #{agent_name}"
+    puts "Then run: brainiac brain init #{agent_name}"
     return
   end
 
@@ -485,7 +485,7 @@ def brain_status(agent_name)
   persona_files = File.directory?(persona_dir) ? Dir.glob(File.join(persona_dir, "**", "*.md")) : []
 
   if knowledge_files.empty? && memory_files.empty? && persona_files.empty?
-    puts "No brain found. Run 'zillacore brain init' to create one."
+    puts "No brain found. Run 'brainiac brain init' to create one."
     return
   end
 
@@ -577,7 +577,7 @@ def brain_list
   end
 
   puts ""
-  puts "Run 'zillacore brain init <agent-name>' to set up a new agent."
+  puts "Run 'brainiac brain init <agent-name>' to set up a new agent."
 end
 
 # Main CLI
@@ -586,42 +586,42 @@ subcommand = ARGV.shift
 
 case subcommand
 when "setup"
-  puts "🔧 ZillaCore Setup"
+  puts "🔧 Brainiac Setup"
   puts ""
 
   # Create directory structure
   dirs = %w[brain/knowledge brain/persona brain/memory handlers plans tmp/discord/draft tmp/discord/posted]
   dirs.each do |dir|
-    path = File.join(ZILLACORE_DIR, dir)
+    path = File.join(BRAINIAC_DIR, dir)
     FileUtils.mkdir_p(path)
   end
-  puts "✓ Created ~/.zillacore/ directory structure"
+  puts "✓ Created ~/.brainiac/ directory structure"
 
   # Copy example configs
-  templates_dir = File.join(ZILLACORE_ROOT, "templates")
+  templates_dir = File.join(BRAINIAC_ROOT, "templates")
   if Dir.exist?(templates_dir)
     copied = 0
     Dir.glob(File.join(templates_dir, "*.example")).each do |template|
-      dest = File.join(ZILLACORE_DIR, File.basename(template, ".example"))
+      dest = File.join(BRAINIAC_DIR, File.basename(template, ".example"))
       unless File.exist?(dest)
         FileUtils.cp(template, dest)
         copied += 1
       end
     end
-    puts "✓ Copied #{copied} example config(s) to ~/.zillacore/ (existing files preserved)"
+    puts "✓ Copied #{copied} example config(s) to ~/.brainiac/ (existing files preserved)"
   end
 
   puts ""
   puts "Next steps:"
-  puts "  1. Edit config files in ~/.zillacore/ with your secrets and IDs"
+  puts "  1. Edit config files in ~/.brainiac/ with your secrets and IDs"
   puts "  2. Create agent configs in ~/.kiro/agents/"
-  puts "  3. Register projects: cd ~/Code/myproject && zillacore register"
-  puts "  4. Initialize brain: zillacore brain init"
-  puts "  5. Start server: zillacore server"
+  puts "  3. Register projects: cd ~/Code/myproject && brainiac register"
+  puts "  4. Initialize brain: brainiac brain init"
+  puts "  5. Start server: brainiac server"
 
 when "register", "add"
   OptionParser.new do |opts|
-    opts.banner = "Usage: zillacore register [options]"
+    opts.banner = "Usage: brainiac register [options]"
     opts.on("-p", "--path PATH", "Project path (default: current directory)")
     opts.on("-f", "--force", "Overwrite existing project")
   end.parse!(into: options)
@@ -630,7 +630,7 @@ when "register", "add"
 
 when "unregister", "remove", "rm"
   if ARGV.empty?
-    puts "Usage: zillacore unregister <project-key>"
+    puts "Usage: brainiac unregister <project-key>"
     exit 1
   end
   unregister_project(ARGV[0])
@@ -639,21 +639,21 @@ when "list", "ls"
   list_projects
 
 when "projects"
-  # Support "zillacore projects list" as an alias for "zillacore list"
+  # Support "brainiac projects list" as an alias for "brainiac list"
   projects_cmd = ARGV.shift
   case projects_cmd
   when "list", "ls", nil
     list_projects
   when "show"
     if ARGV.empty?
-      puts "Usage: zillacore projects show <project-key>"
+      puts "Usage: brainiac projects show <project-key>"
       exit 1
     end
     show_project(ARGV[0])
   when "default"
     project_key = ARGV[0]
     unless project_key
-      puts "Usage: zillacore projects default <project-key>"
+      puts "Usage: brainiac projects default <project-key>"
       puts "  Sets the default project for project-specific setup (e.g., .env copying)"
       exit 1
     end
@@ -679,15 +679,15 @@ when "projects"
 
 when "show"
   if ARGV.empty?
-    puts "Usage: zillacore show <project-key>"
+    puts "Usage: brainiac show <project-key>"
     exit 1
   end
   show_project(ARGV[0])
 
 when "config"
   OptionParser.new do |opts|
-    opts.banner = "Usage: zillacore config [options]"
-    opts.on("-s", "--server-url URL", "ZillaCore server URL")
+    opts.banner = "Usage: brainiac config [options]"
+    opts.on("-s", "--server-url URL", "Brainiac server URL")
     opts.on("--show", "Show current configuration")
   end.parse!(into: options)
 
@@ -695,7 +695,7 @@ when "config"
 
 when "server", "s"
   OptionParser.new do |opts|
-    opts.banner = "Usage: zillacore server [options]"
+    opts.banner = "Usage: brainiac server [options]"
     opts.on("-d", "--daemon", "Run server in background (detached)")
   end.parse!(into: options)
 
@@ -705,7 +705,7 @@ when "stop"
   stop_server
 
 when "restart"
-  puts "Restarting ZillaCore server..."
+  puts "Restarting Brainiac server..."
   wait_for_agents_to_finish if find_server_pid
   if stop_server
     # Wait a bit longer to ensure the process is fully dead
@@ -729,11 +729,11 @@ when "restart"
 
 when "logs", "log"
   # Tail the server log
-  log_file = File.join(ZILLACORE_ROOT, "tmp", "zillacore-server.log")
+  log_file = File.join(BRAINIAC_ROOT, "tmp", "brainiac-server.log")
 
   unless File.exist?(log_file)
     puts "No log file found at #{log_file}"
-    puts "Is the server running? Check with: zillacore status"
+    puts "Is the server running? Check with: brainiac status"
     exit 1
   end
 
@@ -742,18 +742,18 @@ when "logs", "log"
 when "status"
   pid = find_server_pid
   if pid
-    puts "ZillaCore server is running (PID: #{pid})"
+    puts "Brainiac server is running (PID: #{pid})"
   else
-    puts "ZillaCore server is not running"
+    puts "Brainiac server is not running"
   end
 
 when "path"
-  puts ZILLACORE_DIR
+  puts BRAINIAC_DIR
 
 when "discord"
   discord_cmd = ARGV.shift
-  discord_config_file = File.join(ZILLACORE_DIR, "discord.json")
-  agent_registry_file = File.join(ZILLACORE_DIR, "agents.json")
+  discord_config_file = File.join(BRAINIAC_DIR, "discord.json")
+  agent_registry_file = File.join(BRAINIAC_DIR, "agents.json")
 
   case discord_cmd
   when "config"
@@ -761,7 +761,7 @@ when "discord"
       puts File.read(discord_config_file)
     else
       puts "No Discord config found at #{discord_config_file}"
-      puts "Create one with: zillacore discord map <channel-id> <project>"
+      puts "Create one with: brainiac discord map <channel-id> <project>"
       puts "Or copy discord.json.example to #{discord_config_file}"
     end
 
@@ -770,7 +770,7 @@ when "discord"
     project_key = ARGV[1]
 
     unless channel_id && project_key
-      puts "Usage: zillacore discord map <channel-id> <project-key>"
+      puts "Usage: brainiac discord map <channel-id> <project-key>"
       exit 1
     end
 
@@ -778,7 +778,7 @@ when "discord"
     config["channel_mappings"] ||= {}
     config["channel_mappings"][channel_id] = { "project" => project_key }
 
-    ensure_zillacore_dir
+    ensure_brainiac_dir
     File.write(discord_config_file, JSON.pretty_generate(config))
     puts "✓ Mapped channel #{channel_id} → project '#{project_key}'"
 
@@ -786,14 +786,14 @@ when "discord"
     project_key = ARGV[0]
 
     unless project_key
-      puts "Usage: zillacore discord default <project-key>"
+      puts "Usage: brainiac discord default <project-key>"
       exit 1
     end
 
     config = File.exist?(discord_config_file) ? JSON.parse(File.read(discord_config_file)) : { "channel_mappings" => {} }
     config["default_project"] = project_key
 
-    ensure_zillacore_dir
+    ensure_brainiac_dir
     File.write(discord_config_file, JSON.pretty_generate(config))
     puts "✓ Default project: #{project_key}"
 
@@ -802,9 +802,9 @@ when "discord"
     token = ARGV[1]
 
     unless agent_key && token
-      puts "Usage: zillacore discord token <agent-key> <bot-token>"
+      puts "Usage: brainiac discord token <agent-key> <bot-token>"
       puts "  Sets the DISCORD_BOT_TOKEN env var for an agent in the registry."
-      puts "  Example: zillacore discord token galen Bot_TOKEN_HERE"
+      puts "  Example: brainiac discord token galen Bot_TOKEN_HERE"
       exit 1
     end
 
@@ -813,7 +813,7 @@ when "discord"
     registry[agent_key]["env"] ||= {}
     registry[agent_key]["env"]["DISCORD_BOT_TOKEN"] = token
 
-    ensure_zillacore_dir
+    ensure_brainiac_dir
     File.write(agent_registry_file, JSON.pretty_generate(registry))
     puts "✓ Set DISCORD_BOT_TOKEN for '#{agent_key}'"
 
@@ -841,7 +841,7 @@ when "discord"
       end
     rescue StandardError => e
       puts "Could not reach server at #{server_url}: #{e.message}"
-      puts "Is the server running? Check with: zillacore status"
+      puts "Is the server running? Check with: brainiac status"
     end
 
   when "agents"
@@ -849,7 +849,7 @@ when "discord"
     agents_with_tokens = registry.select { |_k, v| v.is_a?(Hash) && (v.dig("env", "DISCORD_BOT_TOKEN") || v["discord_bot_token"]) }
     if agents_with_tokens.empty?
       puts "No agents have Discord bot tokens configured."
-      puts "Add one with: zillacore discord token <agent-key> <bot-token>"
+      puts "Add one with: brainiac discord token <agent-key> <bot-token>"
     else
       puts "Agents with Discord bots:"
       agents_with_tokens.each do |key, entry|
@@ -865,19 +865,19 @@ when "discord"
     config = File.exist?(discord_config_file) ? JSON.parse(File.read(discord_config_file)) : {}
     if discord_id
       config["owner_discord_id"] = discord_id
-      ensure_zillacore_dir
+      ensure_brainiac_dir
       File.write(discord_config_file, JSON.pretty_generate(config))
       puts "✓ Owner set to #{discord_id}"
     elsif config["owner_discord_id"]
       puts "Owner: #{config["owner_discord_id"]}"
     else
       puts "No owner set."
-      puts "Usage: zillacore discord owner <discord-user-id>"
+      puts "Usage: brainiac discord owner <discord-user-id>"
     end
 
   else
     puts <<~HELP
-      Usage: zillacore discord <command>
+      Usage: brainiac discord <command>
 
       Commands:
         config                              Show Discord config
@@ -897,12 +897,12 @@ when "discord"
         3. Invite each bot with permissions: Send Messages, Create Public Threads,
            Send Messages in Threads, Add Reactions, Read Message History
         4. Register each bot token:
-           zillacore discord token galen "BOT_TOKEN_FOR_GALEN"
-           zillacore discord token glados "BOT_TOKEN_FOR_GLADOS"
+           brainiac discord token galen "BOT_TOKEN_FOR_GALEN"
+           brainiac discord token glados "BOT_TOKEN_FOR_GLADOS"
         5. Set a default project:
-           zillacore discord default marketplace
+           brainiac discord default marketplace
         6. Start the server (all bots connect automatically):
-           zillacore server
+           brainiac server
 
       Config file: #{discord_config_file}
       Agent registry: #{agent_registry_file}
@@ -910,7 +910,7 @@ when "discord"
   end
 
 when "card-map"
-  card_map_file = File.join(ZILLACORE_DIR, "card_map.json")
+  card_map_file = File.join(BRAINIAC_DIR, "card_map.json")
   cm_cmd = ARGV.shift
   case cm_cmd
   when "clean"
@@ -943,7 +943,7 @@ when "card-map"
       end
     end
   else
-    puts "Usage: zillacore card-map [clean|list]"
+    puts "Usage: brainiac card-map [clean|list]"
     puts "  clean   Remove stale entries (missing worktrees)"
     puts "  list    Show all card map entries"
   end
@@ -970,7 +970,7 @@ when "brain"
       ARGV.delete_at(idx)
     end
     if ARGV.empty?
-      puts "Usage: zillacore brain search [--persona] [--agent <name>] <query>"
+      puts "Usage: brainiac brain search [--persona] [--agent <name>] <query>"
       exit 1
     end
     brain_search(ARGV.join(" "), scope: scope, agent_name: agent_name)
@@ -986,7 +986,7 @@ when "brain"
     end
   else
     puts <<~HELP
-      Usage: zillacore brain <command> [options]
+      Usage: brainiac brain <command> [options]
 
       Commands:
         init [agent-name]                       Initialize brain (shared knowledge + agent persona)
@@ -1004,11 +1004,11 @@ when "brain"
       Persona is only queried when agents write comments.
 
       Examples:
-        zillacore brain init                    # Init for default agent
-        zillacore brain init Nova               # Init persona for Nova
-        zillacore brain search "ruby style"     # Search shared knowledge
-        zillacore brain search --persona "tone" # Search persona
-        zillacore brain list                    # List everything
+        brainiac brain init                    # Init for default agent
+        brainiac brain init Nova               # Init persona for Nova
+        brainiac brain search "ruby style"     # Search shared knowledge
+        brainiac brain search --persona "tone" # Search persona
+        brainiac brain list                    # List everything
     HELP
   end
 
@@ -1032,7 +1032,7 @@ when "cron"
     script = nil
 
     OptionParser.new do |opts|
-      opts.banner = "Usage: zillacore cron add [options] \"<prompt or --script path>\""
+      opts.banner = "Usage: brainiac cron add [options] \"<prompt or --script path>\""
       opts.on("-s", "--schedule EXPR", "Cron expression, @shorthand, or one-time schedule") { |v| schedule = v }
       opts.on("-a", "--agent NAME", "Agent name (default: $AI_AGENT_NAME)") { |v| agent = v }
       opts.on("-p", "--project KEY", "Project key") { |v| project = v }
@@ -1051,22 +1051,22 @@ when "cron"
       puts ""
       puts "Usage examples:"
       puts "  # Agent with prompt (recurring)"
-      puts "  zillacore cron add -s \"0 9 * * *\" -p marketplace \"Daily standup\""
+      puts "  brainiac cron add -s \"0 9 * * *\" -p marketplace \"Daily standup\""
       puts ""
       puts "  # Script mode (no agent, direct execution)"
-      puts "  zillacore cron add -s \"0 9 * * *\" -p zillacore --script ~/.zillacore/scripts/report.sh -d 1234567890"
+      puts "  brainiac cron add -s \"0 9 * * *\" -p brainiac --script ~/.brainiac/scripts/report.sh -d 1234567890"
       puts ""
       puts "  # Recurring (shorthand)"
-      puts "  zillacore cron add -s @daily -p zillacore \"Security audit\""
+      puts "  brainiac cron add -s @daily -p brainiac \"Security audit\""
       puts ""
       puts "  # One-time (natural language)"
-      puts "  zillacore cron add -s \"tomorrow at 9am\" -p marketplace \"Reminder\""
-      puts "  zillacore cron add -s \"in 2 hours\" -p zillacore \"Follow up\""
-      puts "  zillacore cron add -s \"next monday at 3pm\" -p marketplace \"Weekly review\""
+      puts "  brainiac cron add -s \"tomorrow at 9am\" -p marketplace \"Reminder\""
+      puts "  brainiac cron add -s \"in 2 hours\" -p brainiac \"Follow up\""
+      puts "  brainiac cron add -s \"next monday at 3pm\" -p marketplace \"Weekly review\""
       puts ""
       puts "  # Recurring with repeat limit"
-      puts "  zillacore cron add -s \"0 9 * * *\" -r 7 -p marketplace \"Daily reminder for 7 days\""
-      puts "  zillacore cron add -s @daily -r 3 -p zillacore \"Reminder for 3 days\""
+      puts "  brainiac cron add -s \"0 9 * * *\" -r 7 -p marketplace \"Daily reminder for 7 days\""
+      puts "  brainiac cron add -s @daily -r 3 -p brainiac \"Reminder for 3 days\""
       exit 1
     end
 
@@ -1106,7 +1106,7 @@ when "cron"
       end
     rescue StandardError => e
       puts "Could not reach server: #{e.message}"
-      puts "Is the server running? Check with: zillacore status"
+      puts "Is the server running? Check with: brainiac status"
       exit 1
     end
 
@@ -1118,8 +1118,8 @@ when "cron"
 
       if data["jobs"].empty?
         puts "No cron jobs configured."
-        puts "Add one with: zillacore cron add -s \"0 9 * * *\" -p marketplace \"Daily summary\""
-        puts "Or one-time: zillacore cron add -s \"tomorrow at 9am\" -p marketplace \"Reminder\""
+        puts "Add one with: brainiac cron add -s \"0 9 * * *\" -p marketplace \"Daily summary\""
+        puts "Or one-time: brainiac cron add -s \"tomorrow at 9am\" -p marketplace \"Reminder\""
       else
         puts "Cron jobs:"
         data["jobs"].each do |id, job|
@@ -1155,7 +1155,7 @@ when "cron"
   when "remove", "rm", "delete"
     id = ARGV[0]
     unless id
-      puts "Usage: zillacore cron remove <job-id>"
+      puts "Usage: brainiac cron remove <job-id>"
       exit 1
     end
 
@@ -1180,7 +1180,7 @@ when "cron"
   when "enable"
     id = ARGV[0]
     unless id
-      puts "Usage: zillacore cron enable <job-id>"
+      puts "Usage: brainiac cron enable <job-id>"
       exit 1
     end
 
@@ -1205,7 +1205,7 @@ when "cron"
   when "disable"
     id = ARGV[0]
     unless id
-      puts "Usage: zillacore cron disable <job-id>"
+      puts "Usage: brainiac cron disable <job-id>"
       exit 1
     end
 
@@ -1234,7 +1234,7 @@ when "cron"
     forum_title = nil
 
     OptionParser.new do |opts|
-      opts.banner = "Usage: zillacore cron update <job-id> [options]"
+      opts.banner = "Usage: brainiac cron update <job-id> [options]"
       opts.on("-s", "--schedule EXPR", "New cron expression") { |v| schedule = v }
       opts.on("-c", "--channel CHANNEL_ID", "New Discord channel ID") { |v| discord_channel_id = v }
       opts.on("-t", "--title TITLE", "New forum post title") { |v| forum_title = v }
@@ -1242,10 +1242,10 @@ when "cron"
 
     unless id && (schedule || discord_channel_id || forum_title)
       puts "Error: Missing required arguments"
-      puts "Usage: zillacore cron update <job-id> -s \"42 13 * * 1-5\""
-      puts "   or: zillacore cron update <job-id> -c \"1423854179880927274\""
-      puts "   or: zillacore cron update <job-id> -t \"Daily Update\""
-      puts "   or: zillacore cron update <job-id> -s \"42 13 * * 1-5\" -c \"1423854179880927274\""
+      puts "Usage: brainiac cron update <job-id> -s \"42 13 * * 1-5\""
+      puts "   or: brainiac cron update <job-id> -c \"1423854179880927274\""
+      puts "   or: brainiac cron update <job-id> -t \"Daily Update\""
+      puts "   or: brainiac cron update <job-id> -s \"42 13 * * 1-5\" -c \"1423854179880927274\""
       exit 1
     end
 
@@ -1276,7 +1276,7 @@ when "cron"
 
   else
     puts <<~HELP
-      Usage: zillacore cron <command>
+      Usage: brainiac cron <command>
 
       Commands:
         add -s <schedule> -p <project> [-a <agent>] "<prompt>"
@@ -1311,31 +1311,31 @@ when "cron"
 
       Examples:
         # Recurring
-        zillacore cron add -s "0 9 * * *" -p marketplace "Summarize yesterday's work"
-        zillacore cron add -s "@daily" -p zillacore -a GLaDOS "Run security audit"
+        brainiac cron add -s "0 9 * * *" -p marketplace "Summarize yesterday's work"
+        brainiac cron add -s "@daily" -p brainiac -a GLaDOS "Run security audit"
       #{"  "}
         # One-time
-        zillacore cron add -s "tomorrow at 9am" -p marketplace "Reminder about priorities"
-        zillacore cron add -s "in 30 minutes" -p zillacore "Follow up on PR"
+        brainiac cron add -s "tomorrow at 9am" -p marketplace "Reminder about priorities"
+        brainiac cron add -s "in 30 minutes" -p brainiac "Follow up on PR"
       #{"  "}
         # Management
-        zillacore cron list
-        zillacore cron update post-morning-message -s "42 13 * * 1-5"
-        zillacore cron disable daily-summary
-        zillacore cron remove daily-summary
+        brainiac cron list
+        brainiac cron update post-morning-message -s "42 13 * * 1-5"
+        brainiac cron disable daily-summary
+        brainiac cron remove daily-summary
 
-      Config file: #{ZILLACORE_DIR}/cron.json
+      Config file: #{BRAINIAC_DIR}/cron.json
     HELP
   end
 
 when "provider"
   provider_cmd = ARGV.shift
-  providers_dir = File.join(ZILLACORE_DIR, "cli-providers")
+  providers_dir = File.join(BRAINIAC_DIR, "cli-providers")
 
   case provider_cmd
   when "list", "ls"
     unless Dir.exist?(providers_dir)
-      puts "No providers configured. Run 'zillacore provider add <name>' to create one."
+      puts "No providers configured. Run 'brainiac provider add <name>' to create one."
       exit 0
     end
     files = Dir.glob(File.join(providers_dir, "*.json"))
@@ -1352,7 +1352,7 @@ when "provider"
   when "show"
     name = ARGV[0]
     unless name
-      puts "Usage: zillacore provider show <name>"
+      puts "Usage: brainiac provider show <name>"
       exit 1
     end
     file = File.join(providers_dir, "#{name}.json")
@@ -1365,7 +1365,7 @@ when "provider"
   when "add", "create"
     name = ARGV[0]
     unless name
-      puts "Usage: zillacore provider add <name>"
+      puts "Usage: brainiac provider add <name>"
       exit 1
     end
     FileUtils.mkdir_p(providers_dir)
@@ -1386,7 +1386,7 @@ when "provider"
 
   else
     puts <<~HELP
-      Usage: zillacore provider <command>
+      Usage: brainiac provider <command>
 
       Commands:
         list                 List configured CLI providers
@@ -1396,33 +1396,33 @@ when "provider"
   end
 
 when "version", "--version", "-v"
-  puts "zillacore #{ZILLACORE_VERSION}"
+  puts "brainiac #{BRAINIAC_VERSION}"
 
 when "help", "--help", "-h", nil
   puts <<~HELP
-    ZillaCore CLI - Manage projects with ZillaCore server
+    Brainiac CLI - Manage projects with Brainiac server
 
     Usage:
-      zillacore setup                  Bootstrap a new machine (deps, dirs, configs)
-      zillacore server [options]       Start the ZillaCore webhook server (foreground)
-      zillacore stop                   Stop the running server
-      zillacore restart                Restart the server
-      zillacore logs                   Tail the server log
-      zillacore status                 Check if server is running
-      zillacore register [options]     Register current directory as a project
-      zillacore unregister <key>       Unregister a project
-      zillacore list                   List all registered projects
-      zillacore projects list          List all registered projects (alias)
-      zillacore projects default <key> Set the default project
-      zillacore show <key>             Show project configuration
-      zillacore brain <command>        Manage agent long-term memory (brain)
-      zillacore discord <command>      Manage the Discord bot
-      zillacore cron <command>         Manage scheduled agent tasks
-      zillacore provider <command>     Manage CLI providers
-      zillacore config                 Configure ZillaCore CLI
-      zillacore path                   Show ZillaCore config directory
-      zillacore version                Show version
-      zillacore help                   Show this help message
+      brainiac setup                  Bootstrap a new machine (deps, dirs, configs)
+      brainiac server [options]       Start the Brainiac webhook server (foreground)
+      brainiac stop                   Stop the running server
+      brainiac restart                Restart the server
+      brainiac logs                   Tail the server log
+      brainiac status                 Check if server is running
+      brainiac register [options]     Register current directory as a project
+      brainiac unregister <key>       Unregister a project
+      brainiac list                   List all registered projects
+      brainiac projects list          List all registered projects (alias)
+      brainiac projects default <key> Set the default project
+      brainiac show <key>             Show project configuration
+      brainiac brain <command>        Manage agent long-term memory (brain)
+      brainiac discord <command>      Manage the Discord bot
+      brainiac cron <command>         Manage scheduled agent tasks
+      brainiac provider <command>     Manage CLI providers
+      brainiac config                 Configure Brainiac CLI
+      brainiac path                   Show Brainiac config directory
+      brainiac version                Show version
+      brainiac help                   Show this help message
 
     Server Options:
       -d, --daemon                     Run server in background (detached)
@@ -1464,58 +1464,58 @@ when "help", "--help", "-h", nil
 
     Examples:
       # Start the server in the foreground (like rails server)
-      zillacore server
-      zillacore s
+      brainiac server
+      brainiac s
     #{"  "}
       # Start the server in background (detached)
-      zillacore server --daemon
-      zillacore server -d
+      brainiac server --daemon
+      brainiac server -d
     #{"  "}
       # Tail the server logs
-      zillacore logs
+      brainiac logs
     #{"  "}
       # Restart the server
-      zillacore restart
+      brainiac restart
     #{"  "}
       # Stop the server
-      zillacore stop
+      brainiac stop
     #{"  "}
       # Check server status
-      zillacore status
+      brainiac status
     #{"  "}
       # Register current directory
-      cd ~/Code/my-project && zillacore register
+      cd ~/Code/my-project && brainiac register
     #{"  "}
       # Register with specific path
-      zillacore register --path ~/Code/my-project
+      brainiac register --path ~/Code/my-project
     #{"  "}
       # List all projects
-      zillacore list
-      zillacore projects list  # alternative syntax
+      brainiac list
+      brainiac projects list  # alternative syntax
     #{"  "}
       # Set default project
-      zillacore projects default my-project
+      brainiac projects default my-project
     #{"  "}
       # Unregister a project
-      zillacore unregister my-project
+      brainiac unregister my-project
     #{"  "}
       # Show project details
-      zillacore show my-project
+      brainiac show my-project
     #{"  "}
       # Initialize brain for your agent
-      zillacore brain init Galen
+      brainiac brain init Galen
     #{"  "}
       # Search the brain
-      zillacore brain search "ruby conventions"
+      brainiac brain search "ruby conventions"
 
     Configuration:
-      Projects are stored in: #{ZILLACORE_DIR}/projects.json
-      Server config: #{ZILLACORE_DIR}/config.json
-      Brain storage: #{ZILLACORE_DIR}/brain/
+      Projects are stored in: #{BRAINIAC_DIR}/projects.json
+      Server config: #{BRAINIAC_DIR}/config.json
+      Brain storage: #{BRAINIAC_DIR}/brain/
   HELP
 
 else
   puts "Unknown command: #{subcommand}"
-  puts "Run 'zillacore help' for usage information."
+  puts "Run 'brainiac help' for usage information."
   exit 1
 end

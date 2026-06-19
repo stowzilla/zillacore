@@ -5,8 +5,8 @@ require "shellwords"
 # Deployment environment tracking.
 # Tracks which dev environments have active card deploys and which are available.
 
-DEPLOYMENTS_CONFIG_FILE = File.join(ZILLACORE_DIR, "deployments.json")
-DEPLOYMENT_STATE_FILE   = File.join(ZILLACORE_DIR, "deployment_state.json")
+DEPLOYMENTS_CONFIG_FILE = File.join(BRAINIAC_DIR, "deployments.json")
+DEPLOYMENT_STATE_FILE   = File.join(BRAINIAC_DIR, "deployment_state.json")
 
 def load_deployments_config
   return {} unless File.exist?(DEPLOYMENTS_CONFIG_FILE)
@@ -99,7 +99,7 @@ def deploy_to_environment(env_key, worktree_path:, deployed_by: nil)
   entry
 end
 
-DEPLOY_LOGS_DIR = File.join(ZILLACORE_DIR, "deploy_logs")
+DEPLOY_LOGS_DIR = File.join(BRAINIAC_DIR, "deploy_logs")
 
 # Record a failed deploy — saves output to a log file and updates state.
 def record_deploy_failure(env_key, worktree_path:, stdout: "", stderr: "")

@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-# ZillaCore Cron — scheduled agent tasks
+# Brainiac Cron — scheduled agent tasks
 #
 # Runs in a background thread, checks cron jobs every minute,
 # dispatches agents with natural language prompts on schedule.
@@ -9,7 +9,7 @@ require "English"
 require "time"
 require "json"
 
-CRON_CONFIG_FILE = File.join(ZILLACORE_DIR, "cron.json")
+CRON_CONFIG_FILE = File.join(BRAINIAC_DIR, "cron.json")
 CRON_JOBS = {}
 CRON_JOBS_MUTEX = Mutex.new
 CRON_THREAD = { ref: nil }
@@ -183,7 +183,7 @@ end
 
 # Save cron jobs to config
 def save_cron_jobs(jobs)
-  FileUtils.mkdir_p(ZILLACORE_DIR)
+  FileUtils.mkdir_p(BRAINIAC_DIR)
   File.write(CRON_CONFIG_FILE, JSON.pretty_generate(jobs))
 end
 
@@ -404,7 +404,7 @@ def build_cron_prompt(job, project)
 
     { response_file: draft_file, meta_file: meta_file, full_prompt: full_prompt }
   else
-    response_file = File.join(ZILLACORE_DIR, "tmp", "cron", "cron-#{job[:id]}-#{Time.now.to_i}.md")
+    response_file = File.join(BRAINIAC_DIR, "tmp", "cron", "cron-#{job[:id]}-#{Time.now.to_i}.md")
     FileUtils.mkdir_p(File.dirname(response_file))
 
     full_prompt = <<~PROMPT
@@ -565,7 +565,7 @@ end
 
 # Write cron prompt to a temp file, return path.
 def write_cron_prompt_file(job, prompt_content, timestamp)
-  prompt_dir = File.join(ZILLACORE_DIR, "tmp")
+  prompt_dir = File.join(BRAINIAC_DIR, "tmp")
   FileUtils.mkdir_p(prompt_dir)
   prompt_file = File.join(prompt_dir, "prompt-cron-#{job[:id]}-#{timestamp}.md")
   File.write(prompt_file, prompt_content)

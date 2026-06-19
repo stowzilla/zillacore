@@ -1,7 +1,7 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
-# ZillaCore Waybar Module
+# Brainiac Waybar Module
 # Reads from monitor daemon socket and outputs JSON for waybar
 # Single module that updates content dynamically (no config rewrites)
 
@@ -9,9 +9,9 @@ require "json"
 require "socket"
 require "net/http"
 
-SOCKET_PATH = "/tmp/zillacore-monitor.sock"
+SOCKET_PATH = "/tmp/brainiac-monitor.sock"
 API_URL = "http://localhost:4567/api/status"
-CONFIG_PATH = File.expand_path("~/.zillacore/waybar.json")
+CONFIG_PATH = File.expand_path("~/.brainiac/waybar.json")
 
 # Load agent configuration from JSON
 def load_agent_config
@@ -84,7 +84,7 @@ def generate_output
   if state["error"]
     return {
       text: "⚠️",
-      tooltip: "ZillaCore Error: #{escape_pango(state["error"])}",
+      tooltip: "Brainiac Error: #{escape_pango(state["error"])}",
       class: "error"
     }
   end

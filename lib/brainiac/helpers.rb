@@ -3,7 +3,7 @@
 # Shared helpers: project identification, card map, run_cmd, run_agent, signatures, model detection.
 
 require "English"
-CLI_PROVIDERS_DIR = File.join(ZILLACORE_DIR, "cli-providers")
+CLI_PROVIDERS_DIR = File.join(BRAINIAC_DIR, "cli-providers")
 
 # --trust-all-tools alone doesn't bypass the non-interactive deny list in kiro-cli 1.29.8+.
 # Adding --trust-tools with explicit tool names ensures write/exec tools are approved.
@@ -111,19 +111,19 @@ def apply_worktree_includes(repo_path, worktree_path)
   LOG.info "Worktree include: copied #{copied} file(s), symlinked #{linked} dir(s) for #{worktree_path}" if copied.positive? || linked.positive?
 end
 
-# Run a project-level hook script from .zillacore/<hook_name> if it exists.
+# Run a project-level hook script from .brainiac/<hook_name> if it exists.
 # Passes REPO_PATH (and optionally WORKTREE_PATH) as environment variables.
 def run_project_hook(repo_path, hook_name, extra_env: {})
-  hook = File.join(repo_path, ".zillacore", hook_name)
+  hook = File.join(repo_path, ".brainiac", hook_name)
   return unless File.exist?(hook)
 
   env = { "REPO_PATH" => repo_path }.merge(extra_env)
-  LOG.info "Running .zillacore/#{hook_name} hook for #{repo_path}"
+  LOG.info "Running .brainiac/#{hook_name} hook for #{repo_path}"
   output, status = Open3.capture2e(env, "bash", hook, chdir: repo_path)
   if status.success?
-    LOG.info ".zillacore/#{hook_name} completed successfully"
+    LOG.info ".brainiac/#{hook_name} completed successfully"
   else
-    LOG.warn ".zillacore/#{hook_name} failed (exit #{status.exitstatus}): #{output.strip}"
+    LOG.warn ".brainiac/#{hook_name} failed (exit #{status.exitstatus}): #{output.strip}"
   end
 end
 
@@ -527,7 +527,7 @@ def run_agent(prompt, project_config:, chdir: nil, log_name: "agent", model: nil
 
   head_before = nil
   project_key_for_restart = PROJECTS.find { |_k, v| v == project_config }&.first
-  if project_key_for_restart == "zillacore"
+  if project_key_for_restart == "brainiac"
     head_before, = Open3.capture2("git", "rev-parse", "HEAD", chdir: chdir)
     head_before = head_before.strip
   end
@@ -570,7 +570,7 @@ end
 
 # Write agent prompt to a temp file, return path.
 def write_agent_prompt_file(prompt, log_name, timestamp)
-  prompt_dir = File.join(ZILLACORE_DIR, "tmp")
+  prompt_dir = File.join(BRAINIAC_DIR, "tmp")
   FileUtils.mkdir_p(prompt_dir)
   prompt_file = File.join(prompt_dir, "prompt-#{log_name}-#{timestamp}.md")
   File.write(prompt_file, prompt)
@@ -621,7 +621,7 @@ def handle_agent_completion(**ctx)
   end
 
   brain_push(message: "#{ctx[:agent_config_name] || "agent"}: #{ctx[:log_name]}")
-  check_zillacore_restart(ctx[:head_before], ctx[:chdir], ctx[:project_key_for_restart], ctx[:agent_config_name])
+  check_brainiac_restart(ctx[:head_before], ctx[:chdir], ctx[:project_key_for_restart], ctx[:agent_config_name])
 end
 
 def handle_fizzy_post_session(fizzy_card, exit_status, signaled, agent_name, chdir, source, source_context, project_config, skip_column_move)
@@ -672,15 +672,15 @@ def handle_plan_finalization(prompt_file, agent_name, project_config)
   end
 end
 
-def check_zillacore_restart(head_before, chdir, project_key_for_restart, agent_config_name)
-  return unless project_key_for_restart == "zillacore" && head_before
+def check_brainiac_restart(head_before, chdir, project_key_for_restart, agent_config_name)
+  return unless project_key_for_restart == "brainiac" && head_before
 
   head_after, = Open3.capture2("git", "rev-parse", "HEAD", chdir: chdir)
   git_status, = Open3.capture2("git", "status", "--porcelain", chdir: chdir)
   if head_after.strip != head_before || !git_status.strip.empty?
-    queue_zillacore_restart(agent_config_name || "agent")
+    queue_brainiac_restart(agent_config_name || "agent")
   else
-    LOG.info "[ZillaCore] #{agent_config_name || "agent"} session on zillacore had no changes — skipping restart"
+    LOG.info "[Brainiac] #{agent_config_name || "agent"} session on brainiac had no changes — skipping restart"
   end
 end
 

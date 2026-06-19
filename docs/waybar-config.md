@@ -2,7 +2,7 @@
 
 This file configures how agents appear in the status bar — waybar on Linux, xbar on macOS.
 
-**Location:** `~/.zillacore/waybar.json`
+**Location:** `~/.brainiac/waybar.json`
 
 ## Example Configuration
 
@@ -89,8 +89,8 @@ The xbar plugin reads from the same daemon socket as waybar. Make sure the monit
 ruby monitor/daemon.rb &
 ```
 
-After editing agent config, restart zillacore:
+After editing agent config, restart brainiac:
 ```bash
-zillacore restart
+brainiac restart
 ```
 

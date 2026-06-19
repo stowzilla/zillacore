@@ -1,7 +1,7 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
-# ZillaCore macOS Deploy Action
+# Brainiac macOS Deploy Action
 # Prompts for a Fizzy card number via osascript, finds the worktree, and deploys.
 # Usage: deploy-env-macos.rb <env_key>
 
@@ -40,7 +40,7 @@ card_number = `osascript -e #{Shellwords.escape(prompt_script)} 2>/dev/null`.str
 exit if card_number.empty?
 
 # Find worktree via card_map.json
-card_map_path = File.expand_path("~/.zillacore/card_map.json")
+card_map_path = File.expand_path("~/.brainiac/card_map.json")
 worktree = nil
 if File.exist?(card_map_path)
   card_map = begin
@@ -65,7 +65,7 @@ unless worktree
 end
 
 # Resolve AWS_PROFILE
-config_file = File.expand_path("~/.zillacore/deployments.json")
+config_file = File.expand_path("~/.brainiac/deployments.json")
 aws_profile = nil
 if File.exist?(config_file)
   cfg = begin
@@ -117,7 +117,7 @@ deploy_script = <<~BASH
 BASH
 
 # Write to temp file and run in Terminal.app
-script_file = "/tmp/zillacore-deploy-#{env_key}-#{$PROCESS_ID}.sh"
+script_file = "/tmp/brainiac-deploy-#{env_key}-#{$PROCESS_ID}.sh"
 File.write(script_file, deploy_script)
 File.chmod(0o755, script_file)
 

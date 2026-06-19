@@ -3,7 +3,7 @@
 # User identity registry - resolves identities across platforms
 # (Discord, GitHub, Fizzy)
 
-USERS_FILE = File.join(ZILLACORE_DIR, "users.json")
+USERS_FILE = File.join(BRAINIAC_DIR, "users.json")
 
 def load_user_registry
   return { "users" => [] } unless File.exist?(USERS_FILE)

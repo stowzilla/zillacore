@@ -381,8 +381,8 @@ end
 # --- Create singleton instance ---
 
 CARD_INDEX = CardIndex.new(
-  index_file: File.join(ZILLACORE_DIR, "card_index.json"),
-  titles_dir: File.join(ZILLACORE_DIR, "card_titles")
+  index_file: File.join(BRAINIAC_DIR, "card_index.json"),
+  titles_dir: File.join(BRAINIAC_DIR, "card_titles")
 )
 
 CARD_INDEX.load

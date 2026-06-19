@@ -1,7 +1,7 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
-# One-time setup script to install ZillaCore menubar plugin into xbar or SwiftBar
+# One-time setup script to install Brainiac menubar plugin into xbar or SwiftBar
 # Run this once — the plugin will then auto-refresh on its configured interval
 
 PLUGIN_APPS = [
@@ -17,7 +17,7 @@ PLUGIN_APPS = [
   }
 ].freeze
 
-SYMLINK_NAME = "zillacore.2s.rb"
+SYMLINK_NAME = "brainiac.2s.rb"
 SOURCE_PATH = File.join(File.dirname(File.expand_path(__FILE__)), "menubar.rb")
 
 def detect_plugin_app
@@ -59,7 +59,7 @@ app = detect_plugin_app
 unless app
   puts "No xbar or SwiftBar installation detected."
   puts ""
-  puts "Install one of the following to use the ZillaCore menu bar plugin:"
+  puts "Install one of the following to use the Brainiac menu bar plugin:"
   puts "  • xbar:     https://xbarapp.com"
   puts "  • SwiftBar: https://github.com/swiftbar/SwiftBar"
   puts ""
@@ -73,6 +73,6 @@ install_plugin(app[:plugin_dir], SOURCE_PATH)
 verify_executable!(SOURCE_PATH)
 
 link_path = File.join(app[:plugin_dir], SYMLINK_NAME)
-puts "✓ Installed ZillaCore plugin into #{app[:name]}"
+puts "✓ Installed Brainiac plugin into #{app[:name]}"
 puts "  Symlink: #{link_path} → #{SOURCE_PATH}"
 puts "  Refresh interval: 2s"

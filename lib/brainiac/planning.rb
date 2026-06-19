@@ -6,7 +6,7 @@
 # Agent asks clarifying questions, logs Q&A to memory, generates a plan
 # markdown file, and creates Fizzy steps for each task.
 
-PLANS_DIR = File.join(ZILLACORE_DIR, "plans")
+PLANS_DIR = File.join(BRAINIAC_DIR, "plans")
 FileUtils.mkdir_p(PLANS_DIR)
 
 # Detect if a message/card should trigger planning mode.

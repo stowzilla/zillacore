@@ -52,13 +52,13 @@ PROMPT_CORE = <<~PROMPT
   debugging tips, deployment procedures. **This is for doing work.**
 
   Relevant knowledge is automatically retrieved and included above in this prompt when available.
-  You can also search manually: `qmd search "<query>" -c zillacore-knowledge`
+  You can also search manually: `qmd search "<query>" -c brainiac-knowledge`
 
   **MANDATORY: Before running any non-standard CLI tool (fizzy, qmd, gh, project scripts) you haven't used in this session, search the brain first:**
   ```
-  qmd search "<tool-name>" -c zillacore-knowledge
+  qmd search "<tool-name>" -c brainiac-knowledge
   ```
-  Examples: `qmd search "fizzy" -c zillacore-knowledge`, `qmd search "qmd" -c zillacore-knowledge`
+  Examples: `qmd search "fizzy" -c brainiac-knowledge`, `qmd search "qmd" -c brainiac-knowledge`
 
   Standard unix commands (cd, ls, grep, cat, git, curl, etc.) don't need a brain search.
   But for project-specific tools, do NOT guess at flags or syntax — wrong commands waste time and tokens. Look it up first.
@@ -150,7 +150,7 @@ PROMPT_CORE = <<~PROMPT
   - You can specify `agent_name` to use a specialized agent (e.g., "sheogorath" for Android research)
   - Run `ListAgents` first if you want to see available specialized agents
   - Up to 4 subagents can run in parallel
-  - To discover project locations for cross-repo work, run: `zillacore list`
+  - To discover project locations for cross-repo work, run: `brainiac list`
 
   **Limitations:** Subagents don't get your brain context, persona, or memory.
   They can read files and run commands, but cannot post to Fizzy, Discord, or GitHub.
@@ -282,7 +282,7 @@ PROMPT_FIZZY_CHANNEL = <<~PROMPT
   - Only assign a fizzy card if it is currently unassigned and you are requested to work on it. Otherwise leave it, it will be managed by the users.
 
   ### Column Transitions
-  ZillaCore handles column moves automatically — do NOT move cards between columns yourself.
+  Brainiac handles column moves automatically — do NOT move cards between columns yourself.
   Cards move to "Right Now" when you're dispatched and to "Needs Review" when your session ends.
 
   ### Formatting

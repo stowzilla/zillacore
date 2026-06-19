@@ -6,13 +6,13 @@
 # This handler receives those webhooks, verifies the HMAC-SHA256 signature,
 # and dispatches notifications to Discord.
 #
-# Config: ~/.zillacore/zoho.json
+# Config: ~/.brainiac/zoho.json
 # Docs: https://www.zoho.com/mail/help/dev-platform/webhook.html
 
 require "English"
 require_relative "../zoho_mail_api"
 
-ZOHO_CONFIG_FILE = File.join(ZILLACORE_DIR, "zoho.json")
+ZOHO_CONFIG_FILE = File.join(BRAINIAC_DIR, "zoho.json")
 
 def load_zoho_config
   return {} unless File.exist?(ZOHO_CONFIG_FILE)
@@ -183,7 +183,7 @@ end
 # Zoho Email Triage — dispatch an agent to decide if a support email needs a card
 # ---------------------------------------------------------------------------
 
-ZOHO_TRIAGE_DIR = File.join(ZILLACORE_DIR, "tmp", "zoho", "triage")
+ZOHO_TRIAGE_DIR = File.join(BRAINIAC_DIR, "tmp", "zoho", "triage")
 FileUtils.mkdir_p(ZOHO_TRIAGE_DIR)
 
 ZOHO_TRIAGE_PROMPT = <<~PROMPT

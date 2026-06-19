@@ -1,16 +1,16 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
-# ZillaCore Log Viewer
+# Brainiac Log Viewer
 # Shows a rofi menu to select which agent log to tail
 
 require "json"
 require "net/http"
 require "socket"
 
-SOCKET_PATH = "/tmp/zillacore-monitor.sock"
+SOCKET_PATH = "/tmp/brainiac-monitor.sock"
 API_URL = "http://localhost:4567/api/status"
-CONFIG_PATH = File.expand_path("~/.zillacore/waybar.json")
+CONFIG_PATH = File.expand_path("~/.brainiac/waybar.json")
 
 # Load agent configuration from JSON
 def load_agent_config
@@ -73,7 +73,7 @@ state = fetch_state
 sessions = state["sessions"] || []
 
 if sessions.empty?
-  system("notify-send", "ZillaCore", "No active agent sessions")
+  system("notify-send", "Brainiac", "No active agent sessions")
   exit 0
 end
 

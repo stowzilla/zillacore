@@ -1,7 +1,7 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
-# ZillaCore Waybar Per-Environment Deploy Module
+# Brainiac Waybar Per-Environment Deploy Module
 # Usage: waybar-deploy-env.rb <env_key>
 #        waybar-deploy-env.rb <env_key> --click
 #        waybar-deploy-env.rb <env_key> --deploy
@@ -48,7 +48,7 @@ def resize_deploy_terminal
   script = "sleep 0.5 && " \
            'width=$(hyprctl monitors -j | ruby -rjson -e "puts JSON.parse(STDIN.read)[0][%q(width)]") && ' \
            "delta=$(( (width / 2) - (width * 15 / 100) )) && " \
-           'hyprctl --batch "dispatch focuswindow class:zillacore-deploy; dispatch resizeactive -${delta} 0"'
+           'hyprctl --batch "dispatch focuswindow class:brainiac-deploy; dispatch resizeactive -${delta} 0"'
   spawn("bash", "-c", script, %i[out err] => "/dev/null")
 end
 
@@ -58,7 +58,7 @@ def handle_click(env_key, deployment)
   if deployment["last_deploy_status"] == "failed" && deployment["last_deploy_log"]
     log = deployment["last_deploy_log"]
     if File.exist?(log.to_s)
-      spawn("alacritty", "--class", "zillacore-deploy", "-e", "bash", "-c",
+      spawn("alacritty", "--class", "brainiac-deploy", "-e", "bash", "-c",
             "echo '=== Deploy failure: #{deployment["label"] || env_key} ===' && echo && cat #{Shellwords.escape(log)} && echo && echo 'Press Enter to close...' && read",
             %i[out err] => "/dev/null")
       resize_deploy_terminal
@@ -88,7 +88,7 @@ def handle_deploy(env_key, deployment)
 
   # Resolve AWS_PROFILE from deployments config
   aws_profile = nil
-  config_file = File.expand_path("~/.zillacore/deployments.json")
+  config_file = File.expand_path("~/.brainiac/deployments.json")
   if File.exist?(config_file)
     cfg = begin
       JSON.parse(File.read(config_file))
@@ -135,7 +135,7 @@ def handle_deploy(env_key, deployment)
     # Non-fatal — deploy proceeds even if server is unreachable
   end
 
-  spawn("alacritty", "--class", "zillacore-deploy", "-e", "bash", "-c", deploy_script, %i[out err] => "/dev/null")
+  spawn("alacritty", "--class", "brainiac-deploy", "-e", "bash", "-c", deploy_script, %i[out err] => "/dev/null")
   resize_deploy_terminal
 end
 

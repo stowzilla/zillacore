@@ -1,12 +1,12 @@
-require_relative "lib/zillacore/version"
+require_relative "lib/brainiac/version"
 
 Gem::Specification.new do |s|
-  s.name        = "zillacore"
-  s.version     = ZillaCore::VERSION
+  s.name        = "brainiac"
+  s.version     = Brainiac::VERSION
   s.summary     = "AI agent webhook receiver and dispatcher"
   s.description = "Webhook receiver that listens for Fizzy, GitHub, Discord, and Zoho Mail events, then dispatches work to AI agent CLIs."
   s.authors     = ["Andy Davis"]
-  s.homepage    = "https://github.com/stowzilla/zillacore"
+  s.homepage    = "https://github.com/stowzilla/brainiac"
   s.license     = "MIT"
   s.required_ruby_version = ">= 3.4"
 
@@ -15,7 +15,7 @@ Gem::Specification.new do |s|
   s.signing_key = signing_key_path if File.exist?(signing_key_path)
 
   s.files = `git ls-files -z`.split("\x0").reject { |f| f.start_with?("test/", "tmp/", ".") }
-  s.executables = ["zillacore"]
+  s.executables = ["brainiac"]
 
   s.add_dependency "puma", "~> 7.2"
   s.add_dependency "rackup", "~> 2.3"

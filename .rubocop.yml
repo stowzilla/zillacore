@@ -14,7 +14,7 @@ Metrics/BlockLength:
   Max: 25
   Exclude:
     - "receiver.rb"
-    - "lib/zillacore/handlers/**/*"
+    - "lib/brainiac/handlers/**/*"
     - "lib/user_registry.rb"
     - "test/**/*"
     - "*.gemspec"
@@ -24,35 +24,35 @@ Metrics/BlockLength:
 Metrics/MethodLength:
   Max: 45
   Exclude:
-    - "bin/zillacore"
-    - "lib/zillacore/handlers/**/*"
+    - "bin/brainiac"
+    - "lib/brainiac/handlers/**/*"
     - "monitor/**/*"
 
 Metrics/AbcSize:
   Max: 50
   Exclude:
-    - "bin/zillacore"
-    - "lib/zillacore/handlers/**/*"
+    - "bin/brainiac"
+    - "lib/brainiac/handlers/**/*"
     - "monitor/**/*"
 
 Metrics/CyclomaticComplexity:
   Max: 18
   Exclude:
-    - "bin/zillacore"
-    - "lib/zillacore/handlers/**/*"
+    - "bin/brainiac"
+    - "lib/brainiac/handlers/**/*"
     - "monitor/**/*"
 
 Metrics/PerceivedComplexity:
   Max: 18
   Exclude:
-    - "bin/zillacore"
-    - "lib/zillacore/handlers/**/*"
+    - "bin/brainiac"
+    - "lib/brainiac/handlers/**/*"
     - "monitor/**/*"
 
 Metrics/ClassLength:
   Exclude:
     - "test/**/*"
-    - "lib/zillacore/card_index.rb"
+    - "lib/brainiac/card_index.rb"
 
 Metrics/BlockNesting:
   Max: 5
@@ -96,7 +96,7 @@ Layout/LineLength:
   Max: 150
   Exclude:
     - "receiver.rb"
-    - "lib/zillacore/handlers/**/*"
+    - "lib/brainiac/handlers/**/*"
     - "monitor/**/*"
 
 # Handler methods often have unused params from Sinatra/block signatures

@@ -15,7 +15,7 @@ require "json"
 #   puts user['identities']['github']['username']  # => "dalton"
 #
 class UserRegistry
-  USERS_FILE = File.expand_path("~/.zillacore/users.json")
+  USERS_FILE = File.expand_path("~/.brainiac/users.json")
 
   def initialize
     @data = load_data

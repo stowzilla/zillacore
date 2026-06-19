@@ -1,7 +1,7 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
-# ZillaCore Waybar Deployments Module
+# Brainiac Waybar Deployments Module
 # Polls /api/deployments and outputs JSON for waybar
 
 require "json"
@@ -111,7 +111,7 @@ def resize_deploy_terminal
   script = "sleep 0.5 && " \
            'width=$(hyprctl monitors -j | ruby -rjson -e "puts JSON.parse(STDIN.read)[0][%q(width)]") && ' \
            "delta=$(( (width / 2) - (width * 15 / 100) )) && " \
-           'hyprctl --batch "dispatch focuswindow class:zillacore-deploy; dispatch resizeactive -${delta} 0"'
+           'hyprctl --batch "dispatch focuswindow class:brainiac-deploy; dispatch resizeactive -${delta} 0"'
   spawn("bash", "-c", script, %i[out err] => "/dev/null")
 end
 
@@ -226,7 +226,7 @@ def handle_deploy
     # Non-fatal — deploy proceeds even if server is unreachable
   end
 
-  spawn("alacritty", "--class", "zillacore-deploy", "-e", "bash", "-c", deploy_script, %i[out err] => "/dev/null")
+  spawn("alacritty", "--class", "brainiac-deploy", "-e", "bash", "-c", deploy_script, %i[out err] => "/dev/null")
   resize_deploy_terminal
 end
 

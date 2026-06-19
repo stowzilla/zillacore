@@ -1,7 +1,7 @@
 PATH
   remote: .
   specs:
-    zillacore (0.0.1)
+    brainiac (0.0.1)
       puma (~> 7.2)
       rackup (~> 2.3)
       sinatra (~> 4.1)
@@ -81,15 +81,16 @@ PLATFORMS
   x86_64-linux
 
 DEPENDENCIES
+  brainiac!
   minitest (~> 5.25)
   rake (~> 13.0)
   rubocop (~> 1.75)
   rubocop-performance (~> 1.25)
-  zillacore!
 
 CHECKSUMS
   ast (2.4.3) sha256=954615157c1d6a382bc27d690d973195e79db7f55e9765ac7c481c60bdb4d383
   base64 (0.3.0) sha256=27337aeabad6ffae05c265c450490628ef3ebd4b67be58257393227588f5a97b
+  brainiac (0.0.1)
   event_emitter (0.2.6) sha256=c72697bd5cce9d36594be1972c17f1c9a573236f44303a4d1d548080364e1391
   json (2.19.9) sha256=9b9025b7cdddafa38d316eca0b2358488e42d417045c1b90d216a9fefe46b79a
   language_server-protocol (3.17.0.5) sha256=fd1e39a51a28bf3eec959379985a72e296e9f9acfce46f6a79d31ca8760803cc
@@ -120,7 +121,6 @@ CHECKSUMS
   unicode-emoji (4.2.0) sha256=519e69150f75652e40bf736106cfbc8f0f73aa3fb6a65afe62fefa7f80b0f80f
   websocket (1.2.11) sha256=b7e7a74e2410b5e85c25858b26b3322f29161e300935f70a0e0d3c35e0462737
   websocket-client-simple (0.8.0) sha256=13a7086d79eec7a15fd5e982fb232b5a05d808d217a73112c8f30259146ef68c
-  zillacore (0.0.1)
 
 BUNDLED WITH
   4.0.10

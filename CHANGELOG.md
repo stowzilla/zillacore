@@ -2,7 +2,7 @@
 
 ## 0.9.1 — 2026-04-21
 
-- Add subagent delegation section to PROMPT_CORE — teaches agents when/how to use `use_subagent` tool, with `zillacore list` for on-demand project discovery
+- Add subagent delegation section to PROMPT_CORE — teaches agents when/how to use `use_subagent` tool, with `brainiac list` for on-demand project discovery
 
 ## 0.9.0
 

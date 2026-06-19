@@ -1,28 +1,28 @@
 #!/usr/bin/env ruby
 
-# ZillaCore — modular webhook receiver
+# Brainiac — modular webhook receiver
 #
-# This is the thin entry point. All logic lives in lib/zillacore/*.
+# This is the thin entry point. All logic lives in lib/brainiac/*.
 # Start with: ruby receiver.rb
 
 require "sinatra"
 require "json"
 
 # Load all modules
-require_relative "lib/zillacore/config"
-require_relative "lib/zillacore/users"
-require_relative "lib/zillacore/agents"
-require_relative "lib/zillacore/brain"
-require_relative "lib/zillacore/skills"
-require_relative "lib/zillacore/sessions"
-require_relative "lib/zillacore/prompts"
-require_relative "lib/zillacore/planning"
-require_relative "lib/zillacore/helpers"
-require_relative "lib/zillacore/cron"
-require_relative "lib/zillacore/handlers/fizzy"
-require_relative "lib/zillacore/handlers/github"
-require_relative "lib/zillacore/card_index"
-require_relative "lib/zillacore/deployments"
+require_relative "lib/brainiac/config"
+require_relative "lib/brainiac/users"
+require_relative "lib/brainiac/agents"
+require_relative "lib/brainiac/brain"
+require_relative "lib/brainiac/skills"
+require_relative "lib/brainiac/sessions"
+require_relative "lib/brainiac/prompts"
+require_relative "lib/brainiac/planning"
+require_relative "lib/brainiac/helpers"
+require_relative "lib/brainiac/cron"
+require_relative "lib/brainiac/handlers/fizzy"
+require_relative "lib/brainiac/handlers/github"
+require_relative "lib/brainiac/card_index"
+require_relative "lib/brainiac/deployments"
 
 # Reload hook registry — custom handlers register callbacks here
 module ReloadHooks
@@ -41,8 +41,8 @@ def register_reload_hook(name, &)
   ReloadHooks.register(name, &)
 end
 
-# Load custom handlers from ~/.zillacore/handlers/ (plugin system)
-CUSTOM_HANDLERS_DIR = File.join(ZILLACORE_DIR, "handlers")
+# Load custom handlers from ~/.brainiac/handlers/ (plugin system)
+CUSTOM_HANDLERS_DIR = File.join(BRAINIAC_DIR, "handlers")
 if Dir.exist?(CUSTOM_HANDLERS_DIR)
   Dir.glob(File.join(CUSTOM_HANDLERS_DIR, "*.rb")).each do |handler|
     LOG.info "[Handlers] Loading custom handler: #{File.basename(handler)}"
@@ -51,8 +51,8 @@ if Dir.exist?(CUSTOM_HANDLERS_DIR)
 end
 
 if DISCORD_ENABLED
-  require_relative "lib/zillacore/handlers/discord"
-  require_relative "lib/zillacore/handlers/zoho"
+  require_relative "lib/brainiac/handlers/discord"
+  require_relative "lib/brainiac/handlers/zoho"
 end
 
 # --- Sinatra config ---
@@ -83,7 +83,7 @@ configure do
   use SelectiveLogger, LOG
 end
 
-LOG.info "[ZillaCore] Starting v#{ZILLACORE_VERSION} on port #{settings.port} (#{settings.environment})"
+LOG.info "[Brainiac] Starting v#{BRAINIAC_VERSION} on port #{settings.port} (#{settings.environment})"
 
 # --- Dashboard authentication ---
 
@@ -292,7 +292,7 @@ if DISCORD_ENABLED
     LOG.info "[Zoho] summary=#{email["summary"].to_s[0..200].inspect}, html=#{email["html"].to_s[0..200].inspect}, content=#{email["content"].to_s[0..200].inspect}"
 
     # Dump raw payload for debugging (last 5 kept)
-    zoho_debug_dir = File.join(ZILLACORE_DIR, "tmp", "zoho", "payloads")
+    zoho_debug_dir = File.join(BRAINIAC_DIR, "tmp", "zoho", "payloads")
     FileUtils.mkdir_p(zoho_debug_dir)
     File.write(File.join(zoho_debug_dir, "#{Time.now.strftime("%Y%m%d-%H%M%S")}.json"), JSON.pretty_generate(email))
 
@@ -576,7 +576,7 @@ get "/api/status" do
       }
     end
 
-    { sessions: sessions, count: sessions.size, recent: recent, version: ZILLACORE_VERSION }.to_json
+    { sessions: sessions, count: sessions.size, recent: recent, version: BRAINIAC_VERSION }.to_json
   end
 end
 
@@ -629,7 +629,7 @@ end
 
 # --- Dashboard ---
 
-WAYBAR_CONFIG_PATH = File.expand_path("~/.zillacore/waybar.json")
+WAYBAR_CONFIG_PATH = File.expand_path("~/.brainiac/waybar.json")
 
 def load_dashboard_agents
   return {} unless File.exist?(WAYBAR_CONFIG_PATH)
@@ -656,9 +656,9 @@ get "/api/logs" do
   halt 400, "Invalid path" if log_file.include?("..") || !log_file.start_with?("/")
   halt 404, "File not found" unless File.exist?(log_file)
 
-  # Only allow reading log files from known project tmp dirs or zillacore tmp
+  # Only allow reading log files from known project tmp dirs or brainiac tmp
   allowed = PROJECTS.values.map { |p| File.join(p["repo_path"], "tmp") }
-  allowed << File.join(ZILLACORE_DIR, "tmp")
+  allowed << File.join(BRAINIAC_DIR, "tmp")
   halt 403, "Forbidden" unless allowed.any? { |dir| log_file.start_with?(dir) }
 
   # Read last N lines and strip ANSI escape codes
@@ -685,7 +685,7 @@ if DISCORD_ENABLED
 
   start_all_discord_gateways
   start_discord_draft_poller
-  start_zillacore_restart_monitor
+  start_brainiac_restart_monitor
 
   # Send "back online" notification after bots connect (if restarted)
   Thread.new do
@@ -699,7 +699,7 @@ if DISCORD_ENABLED
 
       # Check if running an outdated version (skip in dev/foreground mode)
       unless $stdout.tty?
-        version_info = check_zillacore_version
+        version_info = check_brainiac_version
         if version_info[:behind]
           owner_id = owner_discord_id
           mention = owner_id ? "<@#{owner_id}>" : "Someone"
@@ -936,7 +936,7 @@ CARD_INDEX.backfill
 
 LOG.info "[Monitor] Starting daemon..."
 daemon_path = File.join(__dir__, "monitor", "daemon.rb")
-daemon_pid_file = "/tmp/zillacore-daemon.pid"
+daemon_pid_file = "/tmp/brainiac-daemon.pid"
 
 # Kill old daemon if it exists
 if File.exist?(daemon_pid_file)

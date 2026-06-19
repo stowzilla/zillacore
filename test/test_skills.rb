@@ -7,13 +7,13 @@ require "logger"
 require "tempfile"
 
 # Stub constants that skills.rb needs
-ZILLACORE_DIR = Dir.mktmpdir("zillacore-test") unless defined?(ZILLACORE_DIR)
-KNOWLEDGE_DIR = File.join(ZILLACORE_DIR, "brain", "knowledge") unless defined?(KNOWLEDGE_DIR)
-KNOWLEDGE_COLLECTION = "zillacore-knowledge" unless defined?(KNOWLEDGE_COLLECTION)
+BRAINIAC_DIR = Dir.mktmpdir("brainiac-test") unless defined?(BRAINIAC_DIR)
+KNOWLEDGE_DIR = File.join(BRAINIAC_DIR, "brain", "knowledge") unless defined?(KNOWLEDGE_DIR)
+KNOWLEDGE_COLLECTION = "brainiac-knowledge" unless defined?(KNOWLEDGE_COLLECTION)
 FileUtils.mkdir_p(KNOWLEDGE_DIR)
 LOG = Logger.new(File::NULL) unless defined?(LOG)
 
-require_relative "../lib/zillacore/skills"
+require_relative "../lib/brainiac/skills"
 
 class TestSkills < Minitest::Test
   def setup

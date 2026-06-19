@@ -1,10 +1,10 @@
-# ZillaCore
+# Brainiac
 
 A webhook receiver that listens for [Fizzy](https://fizzy.do), GitHub, Discord, and Zoho Mail events, then dispatches work to AI agent CLIs. Each agent has its own persona, brain, and voice — they collaborate on the same projects through @mentions.
 
 ## How It Works
 
-Webhook events trigger the receiver to spawn an AI agent CLI with a natural language prompt. The receiver can dispatch multiple agents — each with a unique personality and kiro-cli config. Agents are discovered from `~/.kiro/agents/`, and projects registered in `~/.zillacore/projects.json`. Config reloads dynamically, no restart needed.
+Webhook events trigger the receiver to spawn an AI agent CLI with a natural language prompt. The receiver can dispatch multiple agents — each with a unique personality and kiro-cli config. Agents are discovered from `~/.kiro/agents/`, and projects registered in `~/.brainiac/projects.json`. Config reloads dynamically, no restart needed.
 
 ### Events
 
@@ -41,7 +41,7 @@ Add a `[plan]` tag to a Discord message or a `plan` tag to a Fizzy card to activ
 
 1. Asks clarifying questions to understand the problem, constraints, and desired outcome
 2. Logs Q&A to its memory file for continuity across sessions
-3. Generates a plan markdown file at `~/.zillacore/plans/card-<id>-plan.md`
+3. Generates a plan markdown file at `~/.brainiac/plans/card-<id>-plan.md`
 4. Automatically creates Fizzy steps from the task breakdown
 
 The agent stays read-only during planning — no code changes, no commits. Once the plan is finalized, the system creates Fizzy steps from each `### Task N: Title` heading in the plan file.
@@ -70,7 +70,7 @@ Detection is case-insensitive (inbound `@glados` still matches GLaDOS), but outb
 
 #### Agent-to-Agent Loop Prevention
 
-When agents can tag each other, infinite loops become possible (Galen tags GLaDOS, GLaDOS tags Galen back, forever). ZillaCore prevents this with layered defenses:
+When agents can tag each other, infinite loops become possible (Galen tags GLaDOS, GLaDOS tags Galen back, forever). Brainiac prevents this with layered defenses:
 
 1. **Dispatch depth limit** — a per-card counter tracks agent-to-agent hops since the last human comment. Default max depth is 10: Human → Agent A → Agent B → ... is allowed up to the limit. The counter resets when a human comments on the card, and expires after 1 hour of no human activity.
 
@@ -78,7 +78,7 @@ When agents can tag each other, infinite loops become possible (Galen tags GLaDO
 
 3. **Existing defenses** — `session_active?` prevents concurrent runs on the same card, `COMMENT_COOLDOWN` (60s) suppresses rapid-fire triggers, and self-comment filtering prevents an agent from triggering itself.
 
-Tuning knobs in `lib/zillacore/sessions.rb`:
+Tuning knobs in `lib/brainiac/sessions.rb`:
 
 - `AGENT_DISPATCH_MAX_DEPTH` — max agent-to-agent hops (default: 10)
 - `AGENT_DISPATCH_WINDOW` — seconds before depth resets without human activity (default: 3600)
@@ -86,16 +86,16 @@ Tuning knobs in `lib/zillacore/sessions.rb`:
 
 ### Card Context Pre-Fetching
 
-Before dispatching an agent, ZillaCore pre-fetches the Fizzy card body and last 5 comments, injecting them directly into the prompt. This means agents don't need to make separate API calls to read the card — the context is already there. Results are cached for 60 seconds to avoid redundant fetches on rapid-fire triggers.
+Before dispatching an agent, Brainiac pre-fetches the Fizzy card body and last 5 comments, injecting them directly into the prompt. This means agents don't need to make separate API calls to read the card — the context is already there. Results are cached for 60 seconds to avoid redundant fetches on rapid-fire triggers.
 
 ### Card Duplicate Detection
 
-When a card is published or triaged, ZillaCore checks for potential duplicates using two methods:
+When a card is published or triaged, Brainiac checks for potential duplicates using two methods:
 
 1. **Trigram similarity** — compares the new card's title against all indexed card titles using character trigram overlap
 2. **Semantic search** — uses qmd to find cards with similar meaning, even if the wording differs
 
-If matches are found above the similarity threshold, ZillaCore posts a comment on the card listing the potential duplicates. The card index is stored at `~/.zillacore/card_index.json` and reindexed periodically via qmd.
+If matches are found above the similarity threshold, Brainiac posts a comment on the card listing the potential duplicates. The card index is stored at `~/.brainiac/card_index.json` and reindexed periodically via qmd.
 
 ### Pre-Post Comment Check
 
@@ -121,20 +121,20 @@ This compounds over dozens of sessions into a rich understanding of each person 
 ### Installation
 
 ```bash
-gem install zillacore
+gem install brainiac
 ```
 
-This installs the `zillacore` binary to your gem bin path (just like `rails`, `rspec`, etc.). Ensure your gem bin directory is on your `PATH` — it typically is if you're using a Ruby version manager.
+This installs the `brainiac` binary to your gem bin path (just like `rails`, `rspec`, etc.). Ensure your gem bin directory is on your `PATH` — it typically is if you're using a Ruby version manager.
 
 ### Quick Start (New Machine)
 
 After installing the gem:
 
 ```bash
-zillacore setup
+brainiac setup
 ```
 
-This creates the `~/.zillacore/` directory structure and copies example config files. Then edit the configs with your actual secrets and IDs (see below).
+This creates the `~/.brainiac/` directory structure and copies example config files. Then edit the configs with your actual secrets and IDs (see below).
 
 ### Prerequisites
 
@@ -150,10 +150,10 @@ This creates the `~/.zillacore/` directory structure and copies example config f
 
 ### Directory Structure
 
-After setup, `~/.zillacore/` looks like:
+After setup, `~/.brainiac/` looks like:
 
 ```
-~/.zillacore/
+~/.brainiac/
 ├── agents.json          # Agent registry (tokens, display names, local flag)
 ├── projects.json        # Registered projects
 ├── github.json          # GitHub webhook secret
@@ -172,7 +172,7 @@ After setup, `~/.zillacore/` looks like:
 
 ### Step-by-Step Configuration
 
-#### 1. Agent Registry (`~/.zillacore/agents.json`)
+#### 1. Agent Registry (`~/.brainiac/agents.json`)
 
 Maps agents to their identity and environment. Every agent that should dispatch on this machine needs an entry here with `"local": true`:
 
@@ -200,7 +200,7 @@ kiro-cli agent create    # Interactive
 # Or manually create ~/.kiro/agents/galen.json
 ```
 
-#### 3. GitHub (`~/.zillacore/github.json`)
+#### 3. GitHub (`~/.brainiac/github.json`)
 
 ```json
 {
@@ -213,7 +213,7 @@ The `webhook_secret` verifies incoming GitHub webhook requests. Generate one wit
 
 **Legacy:** `GITHUB_WEBHOOK_SECRET` env var works as fallback.
 
-#### 4. Fizzy (`~/.zillacore/fizzy.json`)
+#### 4. Fizzy (`~/.brainiac/fizzy.json`)
 
 Defines authorized users, flags humans, and configures boards:
 
@@ -255,9 +255,9 @@ export AI_AGENT_NAME="Galen"  # Defaults to Galen (Linux) or Kaylee (macOS)
 #### 6. Register Projects
 
 ```bash
-cd ~/Code/marketplace && zillacore register
-cd ~/Code/zillacore && zillacore register
-zillacore list
+cd ~/Code/marketplace && brainiac register
+cd ~/Code/brainiac && brainiac register
+brainiac list
 ```
 
 The CLI prompts for project key, Fizzy tags, GitHub repo, and agent CLI settings.
@@ -265,13 +265,13 @@ The CLI prompts for project key, Fizzy tags, GitHub repo, and agent CLI settings
 Set a default project (used as fallback when no tags match):
 
 ```bash
-zillacore projects default myproject
+brainiac projects default myproject
 ```
 
 #### 7. Initialize Brain
 
 ```bash
-zillacore brain init Galen
+brainiac brain init Galen
 ```
 
 This creates the directory structure, sets up qmd collections, and indexes everything.
@@ -285,26 +285,26 @@ This creates the directory structure, sets up qmd collections, and indexes every
 #### 9. Start
 
 ```bash
-zillacore server    # Start and tail logs (Ctrl+C to detach, server keeps running)
+brainiac server    # Start and tail logs (Ctrl+C to detach, server keeps running)
 ngrok http 4567     # Terminal 2
 ```
 
 ## Multi-Agent Setup
 
-This is the core of ZillaCore. Each machine runs one receiver that can dispatch multiple agents.
+This is the core of Brainiac. Each machine runs one receiver that can dispatch multiple agents.
 
 ### Architecture
 
 ```
 Andy's Linux box                    Adam's macOS
 ┌─────────────────────┐            ┌─────────────────────┐
-│ zillacore server     │            │ zillacore server     │
+│ brainiac server     │            │ brainiac server     │
 │                      │            │                      │
 │ ~/.kiro/agents/:     │            │ ~/.kiro/agents/:     │
 │   galen.json         │            │   kaylee.json        │
 │   glados.json        │            │   jane.json          │
 │                      │            │                      │
-│ ~/.zillacore/        │            │ ~/.zillacore/        │
+│ ~/.brainiac/        │            │ ~/.brainiac/        │
 │   agents.json        │            │   agents.json        │
 └─────────────────────┘            └─────────────────────┘
          │                                   │
@@ -326,7 +326,7 @@ The receiver scans this directory to discover which agents it can dispatch. The 
 
 ### Step 2: Agent Registry
 
-The agent registry at `~/.zillacore/agents.json` maps each agent to its identity and environment. This serves four purposes:
+The agent registry at `~/.brainiac/agents.json` maps each agent to its identity and environment. This serves four purposes:
 
 1. **Per-agent environment variables** — any env var can be set per-agent via the `env` hash (e.g. `FIZZY_TOKEN`, `DISCORD_BOT_TOKEN`, custom vars)
 2. **Display name mapping** — agents know the exact spelling for @mentions (e.g. `GLaDOS` not `glados`)
@@ -362,7 +362,7 @@ The `local` flag controls which agents pick up card assignments on this machine.
 
 Agents without an `env` block (like Kaylee above on a Linux box) still appear in the agent roster so local agents spell @mentions correctly.
 
-A legacy format with top-level `fizzy_token` / `discord_bot_token` keys is auto-migrated into the `env` hash at load time. A legacy `~/.zillacore/agent_tokens.json` format (flat `{ "galen": "token" }`) is supported as a fallback and auto-migrated.
+A legacy format with top-level `fizzy_token` / `discord_bot_token` keys is auto-migrated into the `env` hash at load time. A legacy `~/.brainiac/agent_tokens.json` format (flat `{ "galen": "token" }`) is supported as a fallback and auto-migrated.
 
 The registry reloads on every webhook and via `POST /api/reload`.
 
@@ -376,8 +376,8 @@ Each agent needs at least one persona file. Create it directly in the brain:
 
 ```bash
 # Create persona file for your agent
-mkdir -p ~/.zillacore/brain/persona/galen
-cat > ~/.zillacore/brain/persona/galen/style.md << 'EOF'
+mkdir -p ~/.brainiac/brain/persona/galen
+cat > ~/.brainiac/brain/persona/galen/style.md << 'EOF'
 ---
 name: galen-persona
 description: Persona voice for Galen.
@@ -395,11 +395,11 @@ The persona only affects comments — agents do their actual work (coding, debug
 
 #### Knowledge
 
-Shared knowledge goes in `~/.zillacore/brain/knowledge/`. This is where you put project conventions, tool docs, coding patterns — anything all agents should know:
+Shared knowledge goes in `~/.brainiac/brain/knowledge/`. This is where you put project conventions, tool docs, coding patterns — anything all agents should know:
 
 ```bash
-mkdir -p ~/.zillacore/brain/knowledge/tools
-cat > ~/.zillacore/brain/knowledge/tools/fizzy.md << 'EOF'
+mkdir -p ~/.brainiac/brain/knowledge/tools
+cat > ~/.brainiac/brain/knowledge/tools/fizzy.md << 'EOF'
 # Fizzy CLI Reference
 fizzy card list — list cards
 fizzy comment create --card 123 --body "<p>Hello</p>" — post a comment
@@ -413,9 +413,9 @@ Agents also update knowledge themselves during sessions (when they learn somethi
 ### Step 4: Initialize Each Agent's Brain
 
 ```bash
-zillacore brain init              # Default agent (Galen on Linux, Kaylee on macOS)
-zillacore brain init SecurityBot  # Additional agent
-zillacore brain list              # Verify all agents
+brainiac brain init              # Default agent (Galen on Linux, Kaylee on macOS)
+brainiac brain init SecurityBot  # Additional agent
+brainiac brain list              # Verify all agents
 ```
 
 This creates the directory structure, sets up qmd collections, and indexes everything. Run this after you've placed your persona and knowledge files.
@@ -442,13 +442,13 @@ Agents have persistent memory powered by [qmd](https://github.com/tobi/qmd):
 
 | Part      | Location                              | Scope                     | Purpose                                                     |
 | --------- | ------------------------------------- | ------------------------- | ----------------------------------------------------------- |
-| Knowledge | `~/.zillacore/brain/knowledge/`       | Shared across all agents  | Project conventions, patterns, architecture decisions       |
-| Memory    | `~/.zillacore/brain/memory/<agent>/`  | Per-agent, per-card files | Session history — decisions, questions, work status         |
-| Persona   | `~/.zillacore/brain/persona/<agent>/` | Per-agent                 | Communication style, tone — only used when writing comments |
+| Knowledge | `~/.brainiac/brain/knowledge/`       | Shared across all agents  | Project conventions, patterns, architecture decisions       |
+| Memory    | `~/.brainiac/brain/memory/<agent>/`  | Per-agent, per-card files | Session history — decisions, questions, work status         |
+| Persona   | `~/.brainiac/brain/persona/<agent>/` | Per-agent                 | Communication style, tone — only used when writing comments |
 
 Each part gets its own qmd collection:
 
-- `zillacore-knowledge` — shared knowledge
+- `brainiac-knowledge` — shared knowledge
 - `galen-memory`, `kaylee-memory` — per-agent card memory
 - `galen-persona`, `kaylee-persona` — per-agent persona
 
@@ -460,17 +460,17 @@ To seed the brain, create markdown files directly in the appropriate directories
 
 ### Git Sync
 
-The brain directory (`~/.zillacore/brain/`) can be backed up as a git repo. If a `.git` directory is detected inside the brain, ZillaCore automatically syncs:
+The brain directory (`~/.brainiac/brain/`) can be backed up as a git repo. If a `.git` directory is detected inside the brain, Brainiac automatically syncs:
 
 - **Pull** at the start of every session (before building brain context), with a 30-second debounce to avoid hammering on rapid-fire triggers
 - **Push** after every agent session completes (Fizzy, GitHub, and Discord)
 
-This keeps brains in sync across machines. If your co-founder runs their own zillacore with different agents, both machines share the same knowledge and memory through the repo.
+This keeps brains in sync across machines. If your co-founder runs their own brainiac with different agents, both machines share the same knowledge and memory through the repo.
 
 ```bash
-cd ~/.zillacore/brain
+cd ~/.brainiac/brain
 git init
-git remote add origin git@github.com:yourorg/zillacore-brain.git
+git remote add origin git@github.com:yourorg/brainiac-brain.git
 git add -A && git commit -m "initial brain" && git push -u origin main
 ```
 
@@ -480,11 +480,11 @@ Conflicts are handled with `git pull --rebase --autostash`. If a rebase fails (r
 
 Each agent gets its own Discord bot. Users @mention @Galen or @GLaDOS directly in Discord — no shared bot, no agent name detection needed. No Fizzy card or worktree is created; the agent runs in the project's repo for read-only exploration, brain queries, and knowledge/persona updates.
 
-All Discord bots run inside `zillacore server` as background threads — no separate processes to manage.
+All Discord bots run inside `brainiac server` as background threads — no separate processes to manage.
 
 ### Session Supersede
 
-When a human sends a follow-up message within 60 seconds of triggering an agent, ZillaCore kills the previous agent run and starts a new one with the updated context. This lets you correct typos or add context without waiting for the first run to finish. Draft files from the superseded session are cleaned up so stale responses are never delivered.
+When a human sends a follow-up message within 60 seconds of triggering an agent, Brainiac kills the previous agent run and starts a new one with the updated context. This lets you correct typos or add context without waiting for the first run to finish. Draft files from the superseded session are cleaned up so stale responses are never delivered.
 
 ### Cancelling Agent Sessions
 
@@ -517,17 +517,17 @@ Still on the "Bot" tab for each application:
 2. Copy the token immediately — Discord only shows it once
 3. Store it somewhere safe temporarily
 
-Register each token with ZillaCore:
+Register each token with Brainiac:
 
 ```bash
-zillacore discord token galen "BOT_TOKEN_FOR_GALEN"
-zillacore discord token glados "BOT_TOKEN_FOR_GLADOS"
+brainiac discord token galen "BOT_TOKEN_FOR_GALEN"
+brainiac discord token glados "BOT_TOKEN_FOR_GLADOS"
 ```
 
-This adds `DISCORD_BOT_TOKEN` to the agent's `env` hash in `~/.zillacore/agents.json`. You can verify with:
+This adds `DISCORD_BOT_TOKEN` to the agent's `env` hash in `~/.brainiac/agents.json`. You can verify with:
 
 ```bash
-zillacore discord agents
+brainiac discord agents
 ```
 
 #### Step 3: Invite Bots to Your Server
@@ -557,13 +557,13 @@ Replace `YOUR_APP_ID` with the Application ID from the "General Information" tab
 Set a default project so bots know which repo to work in:
 
 ```bash
-zillacore discord default marketplace
+brainiac discord default marketplace
 ```
 
 Optionally map specific channels to different projects:
 
 ```bash
-zillacore discord map 1234567890 zillacore
+brainiac discord map 1234567890 brainiac
 ```
 
 To get a channel ID, enable Developer Mode in Discord (User Settings → Advanced → Developer Mode), then right-click a channel and "Copy Channel ID".
@@ -571,13 +571,13 @@ To get a channel ID, enable Developer Mode in Discord (User Settings → Advance
 #### Step 5: Start the Server
 
 ```bash
-zillacore server
+brainiac server
 ```
 
 All bots connect automatically as background threads. Check they're online:
 
 ```bash
-zillacore discord status
+brainiac discord status
 ```
 
 You should see each bot listed as `connected` with a `user_id`. If a bot shows `error` or `disconnected`, double-check the token and that the Message Content intent is enabled.
@@ -596,22 +596,22 @@ When someone @mentions an agent's bot in Discord:
 Use `[project:XYZ]` to target a specific project and `[opus]`/`[sonnet]`/`[haiku]` to override the model:
 
 ```
-@Galen [project:zillacore] [opus] how does the webhook signature verification work?
+@Galen [project:brainiac] [opus] how does the webhook signature verification work?
 ```
 
 Tags are stripped from the prompt — the agent only sees the question.
 
 ### Response Delivery
 
-Agents write responses to draft files in `~/.zillacore/tmp/discord/draft/`. A background poller thread checks for completed drafts every 10 seconds and delivers them to Discord. Each draft has a `.meta.json` sidecar with delivery metadata (channel ID, agent, thread info). After successful posting, both files move to `~/.zillacore/tmp/discord/posted/`. This file-based approach survives server restarts — orphaned drafts are recovered by the poller.
+Agents write responses to draft files in `~/.brainiac/tmp/discord/draft/`. A background poller thread checks for completed drafts every 10 seconds and delivers them to Discord. Each draft has a `.meta.json` sidecar with delivery metadata (channel ID, agent, thread info). After successful posting, both files move to `~/.brainiac/tmp/discord/posted/`. This file-based approach survives server restarts — orphaned drafts are recovered by the poller.
 
 ### Forum Channel Support
 
-Cron jobs targeting a Discord forum channel automatically create new forum posts instead of regular messages. The forum post title defaults to `<Agent> — <Date>` but can be customized with the `-t` flag on `zillacore cron add`.
+Cron jobs targeting a Discord forum channel automatically create new forum posts instead of regular messages. The forum post title defaults to `<Agent> — <Date>` but can be customized with the `-t` flag on `brainiac cron add`.
 
 ### Configuration
 
-Channel mappings and authorization are stored in `~/.zillacore/discord.json`:
+Channel mappings and authorization are stored in `~/.brainiac/discord.json`:
 
 ```json
 {
@@ -619,7 +619,7 @@ Channel mappings and authorization are stored in `~/.zillacore/discord.json`:
   "owner_discord_id": "YOUR_DISCORD_USER_ID",
   "dashboard_token": "optional-token-for-web-dashboard",
   "channel_mappings": {
-    "0987654321": { "project": "zillacore" }
+    "0987654321": { "project": "brainiac" }
   },
   "user_mappings": {
     "Andy": "123456789012345678",
@@ -647,17 +647,17 @@ Leave `authorized_role_ids` and `authorized_user_ids` empty to allow everyone in
 ### CLI Commands
 
 ```bash
-zillacore discord token <agent> <token>        # Set Discord bot token for an agent
-zillacore discord agents                       # List agents with Discord bot tokens
-zillacore discord default <project>            # Set default project for all channels
-zillacore discord map <channel-id> <project>   # Override for a specific channel
-zillacore discord config                       # Show current Discord config
-zillacore discord status                       # Check bot status via server API
+brainiac discord token <agent> <token>        # Set Discord bot token for an agent
+brainiac discord agents                       # List agents with Discord bot tokens
+brainiac discord default <project>            # Set default project for all channels
+brainiac discord map <channel-id> <project>   # Override for a specific channel
+brainiac discord config                       # Show current Discord config
+brainiac discord status                       # Check bot status via server API
 ```
 
 ## Cron (Scheduled Tasks)
 
-Agents can be dispatched on a schedule — daily standups, weekly summaries, periodic code reviews, whatever you want. Jobs are stored in `~/.zillacore/cron.json` and run in a background thread inside `zillacore server`.
+Agents can be dispatched on a schedule — daily standups, weekly summaries, periodic code reviews, whatever you want. Jobs are stored in `~/.brainiac/cron.json` and run in a background thread inside `brainiac server`.
 
 Supports both recurring schedules (standard cron) and one-time scheduled tasks (natural language or ISO8601 timestamps).
 
@@ -670,26 +670,26 @@ Cron jobs can run in two modes:
 
 ```bash
 # Agent mode (recurring schedules)
-zillacore cron add -s "0 9 * * 1-5" -p marketplace "Summarize open cards and post a standup update"
-zillacore cron add -s "@daily" -p zillacore -a Galen "Review recent commits and flag anything that needs attention"
-zillacore cron add -s "0 17 * * 5" -p marketplace -d 1234567890 "Post a weekly summary to Discord"
+brainiac cron add -s "0 9 * * 1-5" -p marketplace "Summarize open cards and post a standup update"
+brainiac cron add -s "@daily" -p brainiac -a Galen "Review recent commits and flag anything that needs attention"
+brainiac cron add -s "0 17 * * 5" -p marketplace -d 1234567890 "Post a weekly summary to Discord"
 
 # Script mode (no agent, direct execution)
-zillacore cron add -s "0 8 * * 1-5" -p zillacore --script ~/.zillacore/scripts/daily-report.sh -d 1234567890
+brainiac cron add -s "0 8 * * 1-5" -p brainiac --script ~/.brainiac/scripts/daily-report.sh -d 1234567890
 
 # One-time schedules (natural language)
-zillacore cron add -s "tomorrow at 9am" -p marketplace "Reminder about priorities"
-zillacore cron add -s "in 2 hours" -p zillacore "Follow up on PR review"
-zillacore cron add -s "next monday at 3pm" -p marketplace "Weekly planning session"
+brainiac cron add -s "tomorrow at 9am" -p marketplace "Reminder about priorities"
+brainiac cron add -s "in 2 hours" -p brainiac "Follow up on PR review"
+brainiac cron add -s "next monday at 3pm" -p marketplace "Weekly planning session"
 
 # One-time schedules (ISO8601)
-zillacore cron add -s "2026-02-27T09:00:00-05:00" -p marketplace "Specific deadline reminder"
+brainiac cron add -s "2026-02-27T09:00:00-05:00" -p marketplace "Specific deadline reminder"
 
 # Recurring with repeat limit
-zillacore cron add -s "0 9 * * *" -r 7 -p marketplace "Daily reminder for 7 days"
+brainiac cron add -s "0 9 * * *" -r 7 -p marketplace "Daily reminder for 7 days"
 
 # Discord forum channel posting
-zillacore cron add -s "@daily" -p marketplace -d 1234567890 -t "Daily Standup" "Post standup"
+brainiac cron add -s "@daily" -p marketplace -d 1234567890 -t "Daily Standup" "Post standup"
 ```
 
 Flags:
@@ -718,7 +718,7 @@ Requirements:
 - Script runs in the project's repo directory
 - No agent prompt or model selection needed
 
-Example script (`~/.zillacore/scripts/daily-report.sh`):
+Example script (`~/.brainiac/scripts/daily-report.sh`):
 
 ```bash
 #!/bin/bash
@@ -729,13 +729,13 @@ fizzy card list --column done --all --pretty | jq -r '.data[] | "[#\(.number)] \
 ### Managing Jobs
 
 ```bash
-zillacore cron list             # List all jobs with status and last run time
-zillacore cron remove <id>      # Remove a job
-zillacore cron enable <id>      # Enable a paused job
-zillacore cron disable <id>     # Pause a job without removing it
-zillacore cron update <id> -s "42 13 * * 1-5"           # Update schedule
-zillacore cron update <id> -c "1234567890"               # Update Discord channel
-zillacore cron update <id> -t "New Title"                # Update forum title
+brainiac cron list             # List all jobs with status and last run time
+brainiac cron remove <id>      # Remove a job
+brainiac cron enable <id>      # Enable a paused job
+brainiac cron disable <id>     # Pause a job without removing it
+brainiac cron update <id> -s "42 13 * * 1-5"           # Update schedule
+brainiac cron update <id> -c "1234567890"               # Update Discord channel
+brainiac cron update <id> -t "New Title"                # Update forum title
 ```
 
 ### Schedule Format
@@ -778,23 +778,23 @@ If the target channel is a forum channel, a new forum post is created with a cus
 
 ## Web Dashboard
 
-ZillaCore includes a web dashboard at `http://localhost:4567/dashboard` that shows active agent sessions, project status, and system health. Protected by a `dashboard_token` configured in `~/.zillacore/discord.json`.
+Brainiac includes a web dashboard at `http://localhost:4567/dashboard` that shows active agent sessions, project status, and system health. Protected by a `dashboard_token` configured in `~/.brainiac/discord.json`.
 
 ## Monitoring
 
-ZillaCore includes a monitoring system that shows active agent sessions in your desktop status bar. A background daemon polls the server API and exposes state via a Unix socket that status bar plugins read from.
+Brainiac includes a monitoring system that shows active agent sessions in your desktop status bar. A background daemon polls the server API and exposes state via a Unix socket that status bar plugins read from.
 
 ### How It Works
 
 ```
-zillacore server → /api/status → monitor/daemon.rb → /tmp/zillacore-monitor.sock → xbar/waybar plugin
+brainiac server → /api/status → monitor/daemon.rb → /tmp/brainiac-monitor.sock → xbar/waybar plugin
 ```
 
-The monitor daemon starts automatically with `zillacore server`. It polls `/api/status` every 2 seconds and serves the current state to any client connecting to the Unix socket.
+The monitor daemon starts automatically with `brainiac server`. It polls `/api/status` every 2 seconds and serves the current state to any client connecting to the Unix socket.
 
 ### Agent Display Config
 
-Configure how agents appear in the status bar via `~/.zillacore/waybar.json`:
+Configure how agents appear in the status bar via `~/.brainiac/waybar.json`:
 
 ```json
 {
@@ -830,7 +830,7 @@ See `docs/waybar-config.md` for detailed configuration.
 
 ## User Identity Registry
 
-ZillaCore maintains a centralized user identity registry at `~/.zillacore/users.json` that resolves identities across platforms (Discord, GitHub, Fizzy). This ensures agents know who they're talking to regardless of where the interaction happens.
+Brainiac maintains a centralized user identity registry at `~/.brainiac/users.json` that resolves identities across platforms (Discord, GitHub, Fizzy). This ensures agents know who they're talking to regardless of where the interaction happens.
 
 ### Structure
 
@@ -877,16 +877,16 @@ The registry reloads automatically on every webhook and via `POST /api/reload`.
 
 ## Worktree Management
 
-When a card is assigned, ZillaCore creates a git worktree for the agent to work in. Two config files in the project root control how gitignored files are handled:
+When a card is assigned, Brainiac creates a git worktree for the agent to work in. Two config files in the project root control how gitignored files are handled:
 
 - **`.worktreeinclude`** — glob patterns for gitignored files to copy into the worktree (e.g. `.env`, config files)
 - **`.worktreelink`** — glob patterns for gitignored directories to symlink instead of copy (e.g. `node_modules`, `vendor/bundle`)
 
-After copying and symlinking, ZillaCore runs the project hook `.zillacore/worktree-setup` if it exists (see below).
+After copying and symlinking, Brainiac runs the project hook `.brainiac/worktree-setup` if it exists (see below).
 
 ### Project Hooks
 
-Projects can define lifecycle hooks as executable scripts in `.zillacore/` at the project root:
+Projects can define lifecycle hooks as executable scripts in `.brainiac/` at the project root:
 
 | Hook              | When It Runs                                | Environment                          |
 | ----------------- | ------------------------------------------- | ------------------------------------ |
@@ -895,7 +895,7 @@ Projects can define lifecycle hooks as executable scripts in `.zillacore/` at th
 Add hooks by creating executable scripts:
 
 ```bash
-# .zillacore/worktree-setup
+# .brainiac/worktree-setup
 #!/bin/bash
 cd "$WORKTREE_PATH"
 bundle install --quiet
@@ -903,11 +903,11 @@ bundle install --quiet
 
 ## Zoho Mail
 
-ZillaCore can receive Zoho Mail webhooks and route email notifications to Discord channels based on configurable rules.
+Brainiac can receive Zoho Mail webhooks and route email notifications to Discord channels based on configurable rules.
 
 ### Setup
 
-Create `~/.zillacore/zoho.json`:
+Create `~/.brainiac/zoho.json`:
 
 ```json
 {
@@ -948,54 +948,54 @@ The `hook_secret` is auto-captured from Zoho's initial handshake request — no 
 
 ## Version Check
 
-On startup, ZillaCore checks if the local repo is behind `origin/master`. If it detects the local version is outdated, it logs a warning. This helps ensure agents are always running the latest code.
+On startup, Brainiac checks if the local repo is behind `origin/master`. If it detects the local version is outdated, it logs a warning. This helps ensure agents are always running the latest code.
 
 ## Self-Restart
 
-When an agent works on the zillacore project itself, the server automatically queues a restart. A background monitor thread checks every 30 seconds — once all active agent sessions finish, it stops the current server and spawns a new one. This ensures code changes agents make to zillacore take effect without manual intervention, and no running sessions are interrupted.
+When an agent works on the brainiac project itself, the server automatically queues a restart. A background monitor thread checks every 30 seconds — once all active agent sessions finish, it stops the current server and spawns a new one. This ensures code changes agents make to brainiac take effect without manual intervention, and no running sessions are interrupted.
 
 ## CLI Reference
 
 ### Server
 
 ```bash
-zillacore server                # Start and tail logs (Ctrl+C to detach, server keeps running)
-zillacore server --daemon       # Background mode
-zillacore stop                  # Stop
-zillacore restart               # Restart
-zillacore status                # Check if running
+brainiac server                # Start and tail logs (Ctrl+C to detach, server keeps running)
+brainiac server --daemon       # Background mode
+brainiac stop                  # Stop
+brainiac restart               # Restart
+brainiac status                # Check if running
 ```
 
-To inspect logs, read the log file directly — don't use `zillacore logs` (it streams indefinitely):
+To inspect logs, read the log file directly — don't use `brainiac logs` (it streams indefinitely):
 
 ```bash
-cat tmp/zillacore-server.log
-tail -100 tmp/zillacore-server.log
+cat tmp/brainiac-server.log
+tail -100 tmp/brainiac-server.log
 ```
 
 ### Projects
 
 ```bash
-zillacore register              # Register current directory (interactive)
-zillacore list                  # List all projects
-zillacore projects default <key> # Set default project (fallback when no tags match)
-zillacore show <key>            # Show project config
-zillacore unregister <key>      # Remove a project
+brainiac register              # Register current directory (interactive)
+brainiac list                  # List all projects
+brainiac projects default <key> # Set default project (fallback when no tags match)
+brainiac show <key>            # Show project config
+brainiac unregister <key>      # Remove a project
 ```
 
 ### Brain
 
 ```bash
-zillacore brain init [agent]              # Initialize brain
-zillacore brain status [agent]            # Show brain status
-zillacore brain search <query>            # Search shared knowledge
-zillacore brain search --persona <query>  # Search agent persona
-zillacore brain list                      # List everything
+brainiac brain init [agent]              # Initialize brain
+brainiac brain status [agent]            # Show brain status
+brainiac brain search <query>            # Search shared knowledge
+brainiac brain search --persona <query>  # Search agent persona
+brainiac brain list                      # List everything
 ```
 
 ## Project Configuration
 
-Projects are stored in `~/.zillacore/projects.json`:
+Projects are stored in `~/.brainiac/projects.json`:
 
 ```json
 {
@@ -1034,7 +1034,7 @@ Model keys are defined in the project's `allowed_models` config — you can add 
 
 ## Prompt Customization
 
-Prompts are layered in `lib/zillacore/prompts.rb`:
+Prompts are layered in `lib/brainiac/prompts.rb`:
 
 | Layer     | Constant                     | Included When                                                           |
 | --------- | ---------------------------- | ----------------------------------------------------------------------- |
@@ -1107,44 +1107,44 @@ curl http://localhost:4567/api/status                       # Active agent sessi
 Auto-restart on file changes:
 
 ```bash
-ls zillacore receiver.rb lib/zillacore/*.rb lib/zillacore/handlers/*.rb | entr -r zillacore server
+ls brainiac receiver.rb lib/brainiac/*.rb lib/brainiac/handlers/*.rb | entr -r brainiac server
 ```
 
 ## Troubleshooting
 
-**No projects found:** `zillacore list` to check, `zillacore path` to find config directory.
+**No projects found:** `brainiac list` to check, `brainiac path` to find config directory.
 
-**Card not matching a project:** Verify the Fizzy card has a tag matching `fizzy_tags` in the project config. If no tags match, the default project is used (set with `zillacore projects default`).
+**Card not matching a project:** Verify the Fizzy card has a tag matching `fizzy_tags` in the project config. If no tags match, the default project is used (set with `brainiac projects default`).
 
 **Agent not dispatching:** Check that `~/.kiro/agents/<name>.json` exists for the agent. The receiver discovers agents by scanning that directory. For registry-only agents, ensure `"local": true` is set.
 
 **Cross-agent mention ignored:** Both machines receive webhooks. Only the machine with the agent's kiro-cli config in `~/.kiro/agents/` (or `"local": true` in the registry) will dispatch it.
 
-**Agent commenting as wrong user:** Check `~/.zillacore/agents.json` has the correct `FIZZY_TOKEN` in the agent's `env` hash. The env is injected into the spawned agent process — verify with `curl http://localhost:4567/api/agents` to see the roster.
+**Agent commenting as wrong user:** Check `~/.brainiac/agents.json` has the correct `FIZZY_TOKEN` in the agent's `env` hash. The env is injected into the spawned agent process — verify with `curl http://localhost:4567/api/agents` to see the roster.
 
 **Agent @mention not linking in Fizzy:** The `fizzy_name` in `agents.json` must match the exact Fizzy account name (case-sensitive). Check `curl http://localhost:4567/api/agents` to see what the roster looks like.
 
-**Agent-to-agent loop:** Shouldn't happen — dispatch depth is capped at 10 hops by default. Check `curl http://localhost:4567/api/dispatch-depth` to see current state. Adjust `AGENT_DISPATCH_MAX_DEPTH` in `lib/zillacore/sessions.rb` if needed.
+**Agent-to-agent loop:** Shouldn't happen — dispatch depth is capped at 10 hops by default. Check `curl http://localhost:4567/api/dispatch-depth` to see current state. Adjust `AGENT_DISPATCH_MAX_DEPTH` in `lib/brainiac/sessions.rb` if needed.
 
-**Brain not working:** `zillacore brain status` to check. Make sure qmd is installed (`npm install -g @tobilu/qmd`) and `zillacore brain init` has been run for each agent.
+**Brain not working:** `brainiac brain status` to check. Make sure qmd is installed (`npm install -g @tobilu/qmd`) and `brainiac brain init` has been run for each agent.
 
-**Brain sync not pushing:** Check that `~/.zillacore/brain/` is a git repo with a remote configured. Look for `[Brain] Push failed` in the server logs. The most common cause is an SSH key issue — make sure the machine can `git push` from that directory.
+**Brain sync not pushing:** Check that `~/.brainiac/brain/` is a git repo with a remote configured. Look for `[Brain] Push failed` in the server logs. The most common cause is an SSH key issue — make sure the machine can `git push` from that directory.
 
-**Discord bot not connecting:** Check `zillacore discord status`. Common causes: invalid token (reset it in the Discord Developer Portal and re-register with `zillacore discord token`), Message Content intent not enabled, or the `websocket-client-simple` gem not installed.
+**Discord bot not connecting:** Check `brainiac discord status`. Common causes: invalid token (reset it in the Discord Developer Portal and re-register with `brainiac discord token`), Message Content intent not enabled, or the `websocket-client-simple` gem not installed.
 
 **Discord bot connects but ignores messages:** The Message Content intent must be enabled in the Discord Developer Portal (Bot tab → Privileged Gateway Intents). Without it, the bot receives empty message content and silently drops every message.
 
-**Discord bot responds but in the wrong project:** Check your channel mapping with `zillacore discord config`. Messages use the channel-specific mapping first, then fall back to `default_project`. Override per-message with `[project:name]` in your Discord message. Set the default with `zillacore discord default <project>`.
+**Discord bot responds but in the wrong project:** Check your channel mapping with `brainiac discord config`. Messages use the channel-specific mapping first, then fall back to `default_project`. Override per-message with `[project:name]` in your Discord message. Set the default with `brainiac discord default <project>`.
 
-**Discord model override not working:** Make sure the project has `allowed_models` configured (check with `zillacore show <project>`). The tag must match a key in `allowed_models` — e.g. `[opus]` matches `"opus": "claude-opus-4.6"`. If no project is mapped to the channel, model overrides have nothing to look up against.
+**Discord model override not working:** Make sure the project has `allowed_models` configured (check with `brainiac show <project>`). The tag must match a key in `allowed_models` — e.g. `[opus]` matches `"opus": "claude-opus-4.6"`. If no project is mapped to the channel, model overrides have nothing to look up against.
 
-**Discord "unauthorized" reaction (🚫):** The user isn't in `authorized_user_ids` or doesn't have a role in `authorized_role_ids` in `~/.zillacore/discord.json`. Leave both arrays empty to allow everyone.
+**Discord "unauthorized" reaction (🚫):** The user isn't in `authorized_user_ids` or doesn't have a role in `authorized_role_ids` in `~/.brainiac/discord.json`. Leave both arrays empty to allow everyone.
 
-**Duplicate Discord dispatches:** Check `~/.zillacore/agents.json` for duplicate entries with the same bot token under different key formats (e.g. `sleeper-service` and `sleeper_service`). Keys are normalized to lowercase with hyphens — duplicates after normalization cause multiple gateway connections.
+**Duplicate Discord dispatches:** Check `~/.brainiac/agents.json` for duplicate entries with the same bot token under different key formats (e.g. `sleeper-service` and `sleeper_service`). Keys are normalized to lowercase with hyphens — duplicates after normalization cause multiple gateway connections.
 
 **Worktree cleanup:** Automatic on PR merge. Manual: `cd /path/to/worktree && gd` (see shell helpers below).
 
-**Zoho emails not arriving in Discord:** Zoho integration requires Discord to be enabled (at least one agent with a `DISCORD_BOT_TOKEN`). Check `~/.zillacore/zoho.json` exists and rules are configured. The `hook_secret` is auto-captured from Zoho's initial handshake — if it's `null`, the webhook hasn't been triggered yet.
+**Zoho emails not arriving in Discord:** Zoho integration requires Discord to be enabled (at least one agent with a `DISCORD_BOT_TOKEN`). Check `~/.brainiac/zoho.json` exists and rules are configured. The `hook_secret` is auto-captured from Zoho's initial handshake — if it's `null`, the webhook hasn't been triggered yet.
 
 ### Shell Helpers (Optional)
 

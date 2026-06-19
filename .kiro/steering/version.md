@@ -1,6 +1,6 @@
 # Versioning Convention
 
-The version lives in `lib/zillacore/version.rb` as a module constant (`ZillaCore::VERSION`).
+The version lives in `lib/brainiac/version.rb` as a module constant (`Brainiac::VERSION`).
 
 ## When to bump
 

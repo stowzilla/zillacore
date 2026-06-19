@@ -7,7 +7,7 @@
 # rather than a single shared bot.
 
 require "English"
-DISCORD_CONFIG_FILE = File.join(ZILLACORE_DIR, "discord.json")
+DISCORD_CONFIG_FILE = File.join(BRAINIAC_DIR, "discord.json")
 DISCORD_API_BASE = "https://discord.com/api/v10"
 DISCORD_GATEWAY_URL = "wss://gateway.discord.gg/?v=10&encoding=json"
 
@@ -15,8 +15,8 @@ DISCORD_GATEWAY_URL = "wss://gateway.discord.gg/?v=10&encoding=json"
 # Response files land in draft/ with a .meta.json sidecar containing delivery info.
 # After successful posting, both files move to posted/.
 # A poller thread recovers orphaned drafts (e.g. after a server restart).
-DISCORD_DRAFT_DIR  = File.join(ZILLACORE_DIR, "tmp", "discord", "draft")
-DISCORD_POSTED_DIR = File.join(ZILLACORE_DIR, "tmp", "discord", "posted")
+DISCORD_DRAFT_DIR  = File.join(BRAINIAC_DIR, "tmp", "discord", "draft")
+DISCORD_POSTED_DIR = File.join(BRAINIAC_DIR, "tmp", "discord", "posted")
 FileUtils.mkdir_p(DISCORD_DRAFT_DIR)
 FileUtils.mkdir_p(DISCORD_POSTED_DIR)
 
@@ -32,37 +32,37 @@ DISCORD_ALL_READY_LOGGED = { done: false }
 DISCORD_SHARED_THREADS = {}
 DISCORD_SHARED_THREADS_MUTEX = Mutex.new
 
-# Zillacore restart queue: when an agent works on zillacore itself, queue a restart
+# Zillacore restart queue: when an agent works on brainiac itself, queue a restart
 # instead of doing it immediately. A background thread checks every 30s and only
 # restarts when no other agents are running, preventing mid-session kills.
 # Using a hash instead of a constant to allow mutation inside synchronize blocks
-ZILLACORE_RESTART_STATE = { queued: false, triggered_by: nil }
-ZILLACORE_RESTART_MUTEX = Mutex.new
+BRAINIAC_RESTART_STATE = { queued: false, triggered_by: nil }
+BRAINIAC_RESTART_MUTEX = Mutex.new
 
-def queue_zillacore_restart(agent_name)
-  ZILLACORE_RESTART_MUTEX.synchronize do
-    unless ZILLACORE_RESTART_STATE[:queued]
-      ZILLACORE_RESTART_STATE[:queued] = true
-      ZILLACORE_RESTART_STATE[:triggered_by] = agent_name
-      LOG.info "[ZillaCore] #{agent_name} queued a restart — will execute when all agents finish"
+def queue_brainiac_restart(agent_name)
+  BRAINIAC_RESTART_MUTEX.synchronize do
+    unless BRAINIAC_RESTART_STATE[:queued]
+      BRAINIAC_RESTART_STATE[:queued] = true
+      BRAINIAC_RESTART_STATE[:triggered_by] = agent_name
+      LOG.info "[Brainiac] #{agent_name} queued a restart — will execute when all agents finish"
     end
   end
 end
 
-# Send a Discord notification about zillacore restart/startup using any available bot token.
+# Send a Discord notification about brainiac restart/startup using any available bot token.
 def send_restart_notification(message)
   channel_id = DISCORD_CONFIG["notification_channel_id"]
   return unless channel_id
 
   tokens = discord_bot_tokens
   # Prefer the triggering agent's token, fall back to first available
-  triggered_by = ZILLACORE_RESTART_MUTEX.synchronize { ZILLACORE_RESTART_STATE[:triggered_by] }
+  triggered_by = BRAINIAC_RESTART_MUTEX.synchronize { BRAINIAC_RESTART_STATE[:triggered_by] }
   token = tokens[triggered_by&.downcase] || tokens.values.first
   return unless token
 
   send_discord_message(channel_id, message, token: token)
 rescue StandardError => e
-  LOG.warn "[ZillaCore] Failed to send restart notification: #{e.message}"
+  LOG.warn "[Brainiac] Failed to send restart notification: #{e.message}"
 end
 
 def any_agents_running?
@@ -76,19 +76,19 @@ def any_agents_running?
   end
 end
 
-def start_zillacore_restart_monitor
+def start_brainiac_restart_monitor
   Thread.new do
-    LOG.info "[ZillaCore] Restart monitor started, checking every 30s"
+    LOG.info "[Brainiac] Restart monitor started, checking every 30s"
     loop do
       sleep 30
-      restart_needed = ZILLACORE_RESTART_MUTEX.synchronize { ZILLACORE_RESTART_STATE[:queued] }
+      restart_needed = BRAINIAC_RESTART_MUTEX.synchronize { BRAINIAC_RESTART_STATE[:queued] }
 
       if restart_needed && !any_agents_running?
-        triggered_by = ZILLACORE_RESTART_MUTEX.synchronize { ZILLACORE_RESTART_STATE[:triggered_by] }
-        LOG.info "[ZillaCore] All agents finished, executing restart..."
-        ZILLACORE_RESTART_MUTEX.synchronize { ZILLACORE_RESTART_STATE[:queued] = false }
+        triggered_by = BRAINIAC_RESTART_MUTEX.synchronize { BRAINIAC_RESTART_STATE[:triggered_by] }
+        LOG.info "[Brainiac] All agents finished, executing restart..."
+        BRAINIAC_RESTART_MUTEX.synchronize { BRAINIAC_RESTART_STATE[:queued] = false }
 
-        send_restart_notification("🔄 Restarting zillacore (triggered by #{triggered_by || "unknown"})...")
+        send_restart_notification("🔄 Restarting brainiac (triggered by #{triggered_by || "unknown"})...")
 
         # Schedule restart: stop now, start in 3 seconds
         # This ensures the current process fully exits before the new one starts
@@ -96,21 +96,21 @@ def start_zillacore_restart_monitor
           sleep 1 # Give time for log to flush
 
           # Spawn a delayed restart command that will execute after we exit
-          # Inherit current PATH so zillacore binary can be found regardless of install location
+          # Inherit current PATH so brainiac binary can be found regardless of install location
           # Process.detach ensures the spawned process survives when parent exits
-          pid = spawn({ "PATH" => ENV.fetch("PATH", nil) }, "sh", "-c", "sleep 3 && zillacore server --daemon",
+          pid = spawn({ "PATH" => ENV.fetch("PATH", nil) }, "sh", "-c", "sleep 3 && brainiac server --daemon",
                       out: "/dev/null", err: "/dev/null")
           Process.detach(pid)
 
           sleep 1
-          LOG.info "[ZillaCore] Stopping server, new instance will start in 3 seconds..."
+          LOG.info "[Brainiac] Stopping server, new instance will start in 3 seconds..."
           Sinatra::Application.quit!
           sleep 0.5 # Give Sinatra a moment to shut down gracefully
           exit! # Force exit to kill all threads immediately
         end
       elsif restart_needed
         active_count = ACTIVE_SESSIONS_MUTEX.synchronize { ACTIVE_SESSIONS.size }
-        LOG.info "[ZillaCore] Restart queued but #{active_count} agent(s) still running, waiting..."
+        LOG.info "[Brainiac] Restart queued but #{active_count} agent(s) still running, waiting..."
       end
     end
   end
@@ -283,7 +283,7 @@ def fetch_discord_message(channel_id, message_id, token:, log_errors: true)
   discord_api(:get, "/channels/#{channel_id}/messages/#{message_id}", token: token, log_errors: log_errors)
 end
 
-# Emojis reserved for zillacore functionality — not treated as feedback
+# Emojis reserved for brainiac functionality — not treated as feedback
 RESERVED_EMOJIS = %w[👀 ❌ 🛑 🚫 ⚠️ ⏳ 😶 ❔ ❓ 🧠].freeze
 
 def add_discord_reaction(channel_id, message_id, emoji, token:)
@@ -596,7 +596,7 @@ def handle_discord_message(message, agent_key, bot_token, bot_user_id)
     next unless content_type.start_with?("image/")
 
     # Download to temp directory
-    temp_dir = File.join(ZILLACORE_DIR, "tmp", "discord", "attachments")
+    temp_dir = File.join(BRAINIAC_DIR, "tmp", "discord", "attachments")
     FileUtils.mkdir_p(temp_dir)
     temp_path = File.join(temp_dir, "#{message_id}-#{filename}")
 
@@ -803,7 +803,7 @@ def handle_discord_message(message, agent_key, bot_token, bot_user_id)
   project_context = context
 
   # Prepare files — response goes to draft/ so the poller can recover it after restarts
-  response_dir = File.join(ZILLACORE_DIR, "tmp")
+  response_dir = File.join(BRAINIAC_DIR, "tmp")
   FileUtils.mkdir_p(response_dir)
   timestamp = Time.now.strftime("%Y%m%d-%H%M%S")
   response_basename = "discord-response-#{timestamp}-#{agent_key}-#{message_id}"
@@ -930,7 +930,7 @@ def handle_discord_message(message, agent_key, bot_token, bot_user_id)
   head_before = nil
   if project_config
     pk = PROJECTS.find { |_k, v| v == project_config }&.first
-    if pk == "zillacore"
+    if pk == "brainiac"
       head_before, = Open3.capture2("git", "rev-parse", "HEAD", chdir: work_dir)
       head_before = head_before.strip
     end
@@ -1042,18 +1042,18 @@ def handle_discord_message(message, agent_key, bot_token, bot_user_id)
 
     brain_push(message: "#{agent_name}: discord-#{message_id}")
 
-    # Restart zillacore if THIS session actually changed code
+    # Restart brainiac if THIS session actually changed code
     # Compare HEAD now vs before the agent ran — only restart if commits were made or files are dirty
     if project_config && head_before
       project_key = PROJECTS.find { |_k, v| v == project_config }&.first
-      if project_key == "zillacore"
+      if project_key == "brainiac"
         chdir = project_config["repo_path"]
         head_after, = Open3.capture2("git", "rev-parse", "HEAD", chdir: chdir)
         git_status, = Open3.capture2("git", "status", "--porcelain", chdir: chdir)
         if head_after.strip != head_before || !git_status.strip.empty?
-          queue_zillacore_restart(agent_name)
+          queue_brainiac_restart(agent_name)
         else
-          LOG.info "[ZillaCore] #{agent_name} Discord session on zillacore had no changes — skipping restart"
+          LOG.info "[Brainiac] #{agent_name} Discord session on brainiac had no changes — skipping restart"
         end
       end
     end
@@ -1517,7 +1517,7 @@ def start_discord_gateway_for(agent_key, bot_token)
             d: {
               token: bot_token,
               intents: 46_593,
-              properties: { os: RUBY_PLATFORM, browser: "zillacore", device: "zillacore" }
+              properties: { os: RUBY_PLATFORM, browser: "brainiac", device: "brainiac" }
             }
           }.to_json)
 
@@ -1574,7 +1574,7 @@ def start_discord_gateway_for(agent_key, bot_token)
         when 9  then LOG.warn "[Discord:#{agent_display}] Invalid session, re-identifying in 5s"
                      sleep 5
                      ws.send({ op: 2, d: { token: bot_token, intents: 46_593,
-                                           properties: { os: RUBY_PLATFORM, browser: "zillacore", device: "zillacore" } } }.to_json)
+                                           properties: { os: RUBY_PLATFORM, browser: "brainiac", device: "brainiac" } } }.to_json)
         when 11 then nil # Heartbeat ACK
         end
       rescue StandardError => e

@@ -1,7 +1,7 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
-# ZillaCore macOS Menu Bar Plugin (xbar/SwiftBar)
+# Brainiac macOS Menu Bar Plugin (xbar/SwiftBar)
 # Reads from monitor daemon socket and outputs xbar-format text
 # Mirrors monitor/waybar.rb patterns for macOS-native display
 
@@ -13,8 +13,8 @@ require "time"
 require "uri"
 
 SERVER_URL = "http://localhost:4567"
-SOCKET_PATH = "/tmp/zillacore-monitor.sock"
-CONFIG_PATH = File.expand_path("~/.zillacore/waybar.json")
+SOCKET_PATH = "/tmp/brainiac-monitor.sock"
+CONFIG_PATH = File.expand_path("~/.brainiac/waybar.json")
 DEFAULT_EMOJI = "❓"
 SELF_PATH = File.realpath(__FILE__)
 

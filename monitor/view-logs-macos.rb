@@ -1,16 +1,16 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
-# ZillaCore macOS Log Viewer
+# Brainiac macOS Log Viewer
 # Opens agent log files in a terminal (wezterm by default, configurable via waybar.json)
-# Set "log_viewer_command" in ~/.zillacore/waybar.json to override (supports wezterm/iTerm/Terminal.app)
+# Set "log_viewer_command" in ~/.brainiac/waybar.json to override (supports wezterm/iTerm/Terminal.app)
 # Uses macOS notifications via osascript for status messages
 
 require "json"
 require "socket"
 
-SOCKET_PATH = "/tmp/zillacore-monitor.sock"
-CONFIG_PATH = File.expand_path("~/.zillacore/waybar.json")
+SOCKET_PATH = "/tmp/brainiac-monitor.sock"
+CONFIG_PATH = File.expand_path("~/.brainiac/waybar.json")
 
 # Load agent configuration from JSON
 # Returns [agents_hash, default_emoji] tuple
@@ -146,7 +146,7 @@ end
 if ARGV[0]
   log_file = ARGV[0]
   unless File.exist?(log_file)
-    notify("ZillaCore", "Log file not found: #{log_file}")
+    notify("Brainiac", "Log file not found: #{log_file}")
     exit 1
   end
   open_log(log_file)
@@ -158,12 +158,12 @@ state = fetch_state
 sessions = state["sessions"] || []
 
 if state["error"]
-  notify("ZillaCore", state["error"])
+  notify("Brainiac", state["error"])
   exit 1
 end
 
 if sessions.empty?
-  notify("ZillaCore", "No active agent sessions")
+  notify("Brainiac", "No active agent sessions")
   exit 0
 end
 
@@ -173,7 +173,7 @@ if sessions.size == 1
   if log_file && File.exist?(log_file)
     open_log(log_file)
   else
-    notify("ZillaCore", "Log file not found: #{log_file}")
+    notify("Brainiac", "Log file not found: #{log_file}")
   end
   exit 0
 end
@@ -196,7 +196,7 @@ if system("which fzf > /dev/null 2>&1")
     if File.exist?(log_file)
       open_log(log_file)
     else
-      notify("ZillaCore", "Log file not found: #{log_file}")
+      notify("Brainiac", "Log file not found: #{log_file}")
     end
   end
 else
@@ -205,6 +205,6 @@ else
   if log_file && File.exist?(log_file)
     open_log(log_file)
   else
-    notify("ZillaCore", "Log file not found: #{log_file}")
+    notify("Brainiac", "Log file not found: #{log_file}")
   end
 end

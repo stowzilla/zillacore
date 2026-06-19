@@ -1,7 +1,7 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
-# ZillaCore Monitor Daemon
+# Brainiac Monitor Daemon
 # Polls /api/status and exposes agent state via Unix socket for waybar
 # No longer triggers config updates - waybar module polls this socket directly
 
@@ -9,10 +9,10 @@ require "json"
 require "net/http"
 require "socket"
 
-SOCKET_PATH = "/tmp/zillacore-monitor.sock"
+SOCKET_PATH = "/tmp/brainiac-monitor.sock"
 API_URL = "http://localhost:4567/api/status"
 POLL_INTERVAL = 2 # seconds
-CONFIG_PATH = File.expand_path("~/.zillacore/waybar.json")
+CONFIG_PATH = File.expand_path("~/.brainiac/waybar.json")
 
 # Load agent configuration from JSON
 def load_agent_config
@@ -68,7 +68,7 @@ def start_server
   File.chmod(0o666, SOCKET_PATH)
 
   # Write PID file
-  File.write("/tmp/zillacore-daemon.pid", Process.pid)
+  File.write("/tmp/brainiac-daemon.pid", Process.pid)
 
   puts "Monitor daemon started, socket: #{SOCKET_PATH}"
 
@@ -92,7 +92,7 @@ rescue Interrupt
   puts "\nShutting down..."
   poller&.kill
   FileUtils.rm_f(SOCKET_PATH)
-  FileUtils.rm_f("/tmp/zillacore-daemon.pid")
+  FileUtils.rm_f("/tmp/brainiac-daemon.pid")
   exit 0
 end
 

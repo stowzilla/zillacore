@@ -1,13 +1,13 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
-# ZillaCore xbar Plugin (macOS menu bar)
+# Brainiac xbar Plugin (macOS menu bar)
 # Reads from monitor daemon socket and outputs xbar-formatted text
 # Filename encodes refresh interval: xbar.3s.rb = every 3 seconds
 #
-# <xbar.title>ZillaCore Agent Monitor</xbar.title>
+# <xbar.title>Brainiac Agent Monitor</xbar.title>
 # <xbar.version>v1.0</xbar.version>
-# <xbar.author>ZillaCore</xbar.author>
+# <xbar.author>Brainiac</xbar.author>
 # <xbar.desc>Shows active AI agent sessions in the macOS menu bar</xbar.desc>
 # <xbar.dependencies>ruby</xbar.dependencies>
 
@@ -15,8 +15,8 @@ require "json"
 require "shellwords"
 require "socket"
 
-SOCKET_PATH = "/tmp/zillacore-monitor.sock"
-CONFIG_PATH = File.expand_path("~/.zillacore/waybar.json")
+SOCKET_PATH = "/tmp/brainiac-monitor.sock"
+CONFIG_PATH = File.expand_path("~/.brainiac/waybar.json")
 
 def load_agent_config
   config = JSON.parse(File.read(CONFIG_PATH))
@@ -110,7 +110,7 @@ state = fetch_state
 if state["error"]
   puts "⚠️ | color=red"
   puts "---"
-  puts "ZillaCore: #{state["error"]} | color=red"
+  puts "Brainiac: #{state["error"]} | color=red"
   exit
 end
 

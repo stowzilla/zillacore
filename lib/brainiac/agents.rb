@@ -2,7 +2,7 @@
 
 # Agent registry, discovery, identity, mention detection, and env injection.
 #
-# The registry at ~/.zillacore/agents.json uses a generic `env` hash so any
+# The registry at ~/.brainiac/agents.json uses a generic `env` hash so any
 # environment variable can be set per-agent:
 #
 #   {

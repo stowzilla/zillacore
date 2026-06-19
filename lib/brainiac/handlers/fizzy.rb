@@ -640,7 +640,7 @@ def handle_comment(payload)
 
   # Determine which agent should handle this comment.
   #
-  # Only local agents (marked with "local": true in ~/.zillacore/agents.json or
+  # Only local agents (marked with "local": true in ~/.brainiac/agents.json or
   # discovered from ~/.kiro/agents/*.json configs) can be dispatched on this machine.
   # Non-local agents are filtered out earlier in the flow.
   #

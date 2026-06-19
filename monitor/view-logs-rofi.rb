@@ -1,7 +1,7 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
-# ZillaCore Log Viewer (Rofi version)
+# Brainiac Log Viewer (Rofi version)
 # Shows a rofi menu to select which agent log to tail
 # Non-blocking, safe for waybar on-click
 
@@ -9,9 +9,9 @@ require "json"
 require "net/http"
 require "socket"
 
-SOCKET_PATH = "/tmp/zillacore-monitor.sock"
+SOCKET_PATH = "/tmp/brainiac-monitor.sock"
 API_URL = "http://localhost:4567/api/status"
-CONFIG_PATH = File.expand_path("~/.zillacore/waybar.json")
+CONFIG_PATH = File.expand_path("~/.brainiac/waybar.json")
 
 # Load agent configuration from JSON
 def load_agent_config
@@ -51,12 +51,12 @@ rescue Errno::ENOENT, Errno::ECONNREFUSED
   # Daemon not running — fall back to direct API call
   data = fetch_state_from_api
   unless data
-    system("notify-send", "ZillaCore", "Server not reachable")
+    system("notify-send", "Brainiac", "Server not reachable")
     exit 1
   end
   data
 rescue StandardError => e
-  system("notify-send", "ZillaCore Error", e.message)
+  system("notify-send", "Brainiac Error", e.message)
   exit 1
 end
 
@@ -74,7 +74,7 @@ state = fetch_state
 sessions = state["sessions"] || []
 
 if sessions.empty?
-  system("notify-send", "ZillaCore", "No active agent sessions")
+  system("notify-send", "Brainiac", "No active agent sessions")
   exit 0
 end
 
@@ -152,7 +152,7 @@ end
 
 launcher = find_launcher
 unless launcher
-  system("notify-send", "ZillaCore", "No menu launcher found (install rofi, fuzzel, wofi, or zenity)")
+  system("notify-send", "Brainiac", "No menu launcher found (install rofi, fuzzel, wofi, or zenity)")
   exit 1
 end
 
@@ -169,9 +169,9 @@ unless selected_line.to_s.empty?
       uri = URI("http://localhost:4567/api/sessions/kill/#{card_key}")
       response = Net::HTTP.post(uri, "", { "Content-Type" => "application/json" })
       if response.is_a?(Net::HTTPSuccess)
-        system("notify-send", "ZillaCore", "Killed session: #{selected[:agent]}")
+        system("notify-send", "Brainiac", "Killed session: #{selected[:agent]}")
       else
-        system("notify-send", "ZillaCore", "Failed to kill session: #{selected[:agent]}")
+        system("notify-send", "Brainiac", "Failed to kill session: #{selected[:agent]}")
       end
     when :kill_child
       pid = selected[:pid]
@@ -188,7 +188,7 @@ unless selected_line.to_s.empty?
           nil
         end
       end
-      system("notify-send", "ZillaCore", "Killed #{selected[:cmd]} (PID #{pid})")
+      system("notify-send", "Brainiac", "Killed #{selected[:cmd]} (PID #{pid})")
     end
   end
 end

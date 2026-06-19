@@ -4,7 +4,7 @@
   "dashboard_token": null,
   "channel_mappings": {
     "OPTIONAL_CHANNEL_ID": {
-      "project": "zillacore"
+      "project": "brainiac"
     }
   },
   "user_mappings": {
