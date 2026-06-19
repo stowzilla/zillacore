@@ -588,12 +588,8 @@ def run_agent(prompt, project_config:, chdir: nil, log_name: "agent", model: nil
   LOG.info "Command: #{cmd.join(" ")}#{" (resuming session)" if should_resume}"
   LOG.info "Injecting #{spawn_env.size} env var(s) for agent #{agent_name}: #{spawn_env.keys.join(", ")}" unless spawn_env.empty?
 
-  head_before = nil
   project_key_for_restart = PROJECTS.find { |_k, v| v == project_config }&.first
-  if project_key_for_restart == "brainiac"
-    head_before, = Open3.capture2("git", "rev-parse", "HEAD", chdir: chdir)
-    head_before = head_before.strip
-  end
+  head_before, status_before = capture_git_state(chdir) if project_key_for_restart == "brainiac"
 
   pid = spawn(spawn_env, *cmd,
               chdir: chdir,
@@ -609,7 +605,8 @@ def run_agent(prompt, project_config:, chdir: nil, log_name: "agent", model: nil
       prompt_file: prompt_file, chdir: chdir, source: source,
       source_context: source_context, project_config: project_config,
       card_number: card_number, skip_column_move: skip_column_move,
-      head_before: head_before, project_key_for_restart: project_key_for_restart
+      head_before: head_before, status_before: status_before,
+      project_key_for_restart: project_key_for_restart
     )
   end
 
@@ -699,7 +696,7 @@ def handle_agent_completion(**ctx)
   end
 
   brain_push(message: "#{ctx[:agent_config_name] || "agent"}: #{ctx[:log_name]}")
-  check_brainiac_restart(ctx[:head_before], ctx[:chdir], ctx[:project_key_for_restart], ctx[:agent_config_name])
+  check_brainiac_restart(ctx[:head_before], ctx[:status_before], ctx[:chdir], ctx[:project_key_for_restart], ctx[:agent_config_name])
 end
 
 def handle_fizzy_post_session(fizzy_card, exit_status, signaled, agent_name, chdir, source, source_context, project_config, skip_column_move)
@@ -750,12 +747,21 @@ def handle_plan_finalization(prompt_file, agent_name, project_config)
   end
 end
 
-def check_brainiac_restart(head_before, chdir, project_key_for_restart, agent_config_name)
+# Capture git HEAD and working tree status for a directory.
+# Returns [head_sha, status_porcelain] or [nil, nil] on failure.
+def capture_git_state(chdir)
+  head, = Open3.capture2("git", "rev-parse", "HEAD", chdir: chdir)
+  status, = Open3.capture2("git", "status", "--porcelain", chdir: chdir)
+  [head.strip, status.strip]
+rescue StandardError
+  [nil, nil]
+end
+
+def check_brainiac_restart(head_before, status_before, chdir, project_key_for_restart, agent_config_name)
   return unless project_key_for_restart == "brainiac" && head_before
 
-  head_after, = Open3.capture2("git", "rev-parse", "HEAD", chdir: chdir)
-  git_status, = Open3.capture2("git", "status", "--porcelain", chdir: chdir)
-  if head_after.strip != head_before || !git_status.strip.empty?
+  head_after, status_after = capture_git_state(chdir)
+  if head_after != head_before || status_after != (status_before || "")
     queue_brainiac_restart(agent_config_name || "agent")
   else
     LOG.info "[Brainiac] #{agent_config_name || "agent"} session on brainiac had no changes — skipping restart"

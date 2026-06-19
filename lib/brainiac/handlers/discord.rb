@@ -837,14 +837,37 @@ def handle_discord_message(message, agent_key, bot_token, bot_user_id)
   # Also captures root message content so the agent always has the original context.
   root_message = find_root_message(message, channel_id, bot_token)
   root_message_id = root_message[:id]
-  card_id = "discord-#{channel_id}-#{root_message_id}"
+
+  # Build a stable card_id for memory files. Inside a thread, use parent_channel + thread_id
+  # so all messages in the thread share one memory file. The thread's channel_id IS the thread
+  # starter message ID, which is stable across all messages within it.
+  card_id = if is_thread
+              "discord-#{parent_channel_id}-#{channel_id}"
+            else
+              "discord-#{channel_id}-#{root_message_id}"
+            end
 
   # Build thread root context — inject the original question/message that started
   # this thread so the agent never loses sight of it, even in long conversations.
   thread_root_context = ""
-  if is_thread && root_message[:content] && !root_message[:content].empty?
-    root_author = root_message[:author] || "unknown"
-    thread_root_context = "### Original Message (thread starter)\n#{root_author}: #{root_message[:content]}\n\n"
+  if is_thread
+    root_content = root_message[:content]
+    root_author = root_message[:author]
+
+    # Fallback: if find_root_message didn't capture content (no message_reference chain),
+    # fetch the parent message directly. In Discord, a thread's channel_id equals the
+    # message_id that the thread was created on in the parent channel.
+    if root_content.nil? || root_content.empty?
+      parent_msg = fetch_discord_message(parent_channel_id, channel_id, token: bot_token, log_errors: false)
+      if parent_msg && parent_msg["content"] && !parent_msg["content"].strip.empty?
+        root_content = parent_msg["content"].strip
+        root_author = parent_msg.dig("author", "username") || "unknown"
+      end
+    end
+
+    if root_content && !root_content.empty?
+      thread_root_context = "### Original Message (thread starter)\n#{root_author || "unknown"}: #{root_content}\n\n"
+    end
   end
 
   # Detect planning mode
@@ -857,27 +880,70 @@ def handle_discord_message(message, agent_key, bot_token, bot_user_id)
 
   brain_context = build_brain_context(agent_name: agent_name, card_title: clean_content, comment_body: clean_content)
 
-  # --- Thread worktree management & session resume ---
-  # For threads with a project, manage a dedicated worktree per agent+thread.
-  # On subsequent dispatches, resume the prior session with a lean prompt.
+  # --- Worktree management & session resume ---
+  # Every dispatch with a project gets a dedicated worktree per agent+thread/channel.
+  # For channel messages, create a Discord thread upfront so we have a stable ID
+  # for the worktree, then dispatch in it. This ensures grok sessions persist
+  # across the thread conversation and can be resumed with -c.
   should_resume = false
   thread_worktree_path = nil
-  thread_map_key = "#{agent_key}:#{channel_id}"
+  thread_cli_provider = nil
+  thread_model = nil
+  thread_effort = nil
 
-  if is_thread && project_config
+  # For channel messages (not DMs, not already in a thread), create a thread immediately
+  # so we can use its ID for the worktree. This also means the response delivery
+  # will find the pre-existing thread via the API lookup.
+  pre_created_thread_id = nil
+  if !is_thread && !is_dm && project_config
+    display_name = fizzy_display_name(agent_key)
+    thread = create_discord_thread(channel_id, message_id, name: "#{display_name}: #{clean_content[0..80]}", token: bot_token)
+    if thread && thread["id"]
+      pre_created_thread_id = thread["id"]
+      DISCORD_SHARED_THREADS_MUTEX.synchronize { DISCORD_SHARED_THREADS[message_id] = pre_created_thread_id }
+
+      # Propagate dispatch depth to the new thread
+      parent_depth_key = "discord-#{channel_id}"
+      thread_depth_key = "discord-#{pre_created_thread_id}"
+      parent_info = AGENT_DISPATCH_DEPTH[parent_depth_key]
+      if parent_info
+        AGENT_DISPATCH_DEPTH[thread_depth_key] = { count: 0, last_human_at: parent_info[:last_human_at] }
+      else
+        record_human_comment(thread_depth_key)
+      end
+
+      LOG.info "[Discord:#{agent_name}] Pre-created thread #{pre_created_thread_id} for worktree isolation"
+    else
+      LOG.warn "[Discord:#{agent_name}] Failed to pre-create thread — will run without worktree isolation"
+    end
+  end
+
+  # Determine the thread map key: use the thread ID (existing thread or pre-created one)
+  effective_thread_id = is_thread ? channel_id : pre_created_thread_id
+  thread_map_key = "#{agent_key}:#{effective_thread_id}" if effective_thread_id
+
+  if project_config && thread_map_key
     repo_path = project_config["repo_path"]
     thread_map = DISCORD_THREAD_MAP_MUTEX.synchronize { load_discord_thread_map }
     existing = thread_map[thread_map_key]
 
-    if existing && File.directory?(existing["worktree"])
-      # Existing worktree — resume session
+    if existing && existing["worktree"] && File.directory?(existing["worktree"])
+      # Existing worktree — resume session. Inherit tags from the thread's first dispatch.
       thread_worktree_path = existing["worktree"]
-      resolved_for_resume = resolve_project_cli_config(project_config, cli_provider_override: detect_cli_provider(text: clean_content), agent_name: agent_name)
-      should_resume = !!resolved_for_resume["resume_flag"]
-      LOG.info "[Discord:#{agent_name}] Reusing thread worktree at #{thread_worktree_path} (resume: #{should_resume})"
+      thread_cli_provider = existing["cli_provider"]
+      thread_model = existing["model"]
+      thread_effort = existing["effort"]
+      effective_provider = detect_cli_provider(text: clean_content) || thread_cli_provider
+      resolved_for_resume = resolve_project_cli_config(project_config, cli_provider_override: effective_provider, agent_name: agent_name)
+      should_resume = resolved_for_resume["resume_flag"] ? true : false
+      LOG.info "[Discord:#{agent_name}] Reusing thread worktree at #{thread_worktree_path} (resume: #{should_resume}, cli: #{effective_provider || "default"})"
     else
-      # First dispatch in this thread — create worktree
-      thread_slug = channel_id[-8..]
+      # First worktree creation. Inherit tags from a seeded thread map entry if present.
+      seeded_cli_provider = existing&.dig("cli_provider")
+      seeded_model = existing&.dig("model")
+      seeded_effort = existing&.dig("effort")
+
+      thread_slug = effective_thread_id[-8..]
       branch = "discord-#{agent_key}-#{thread_slug}"
       thread_worktree_path = File.join(File.dirname(repo_path), "#{File.basename(repo_path)}--#{branch}")
 
@@ -902,14 +968,24 @@ def handle_discord_message(message, agent_key, bot_token, bot_user_id)
       apply_worktree_includes(repo_path, thread_worktree_path)
       run_project_hook(repo_path, "worktree-setup", extra_env: { "WORKTREE_PATH" => thread_worktree_path })
 
+      # Store tags: prefer current message tag, then seeded value from initial dispatch
+      first_cli_provider = detect_cli_provider(text: clean_content) || seeded_cli_provider
+      first_model = (project_config ? detect_model(project_config, text: clean_content) : nil) || seeded_model
+      first_effort = (project_config ? detect_effort(project_config, text: clean_content) : nil) || seeded_effort
+      thread_cli_provider = first_cli_provider
+      thread_model = first_model
+      thread_effort = first_effort
+
       DISCORD_THREAD_MAP_MUTEX.synchronize do
         map = load_discord_thread_map
         map[thread_map_key] = { "worktree" => thread_worktree_path, "branch" => branch,
                                 "project" => PROJECTS.find { |_k, v| v == project_config }&.first,
-                                "channel_id" => channel_id, "created_at" => Time.now.iso8601 }
+                                "channel_id" => effective_thread_id, "cli_provider" => first_cli_provider,
+                                "model" => first_model, "effort" => first_effort,
+                                "created_at" => Time.now.iso8601 }
         save_discord_thread_map(map)
       end
-      LOG.info "[Discord:#{agent_name}] Created thread worktree at #{thread_worktree_path}"
+      LOG.info "[Discord:#{agent_name}] Created thread worktree at #{thread_worktree_path}#{" (cli: #{first_cli_provider})" if first_cli_provider}#{" (model: #{first_model})" if first_model}#{" (effort: #{first_effort})" if first_effort}"
     end
   end
 
@@ -918,7 +994,6 @@ def handle_discord_message(message, agent_key, bot_token, bot_user_id)
     prompt = render_discord_resume_prompt(
       message_body: clean_content_for_prompt,
       discord_user: discord_user,
-      channel_history: channel_history,
       response_file: response_file,
       agent_name: agent_name,
       card_id: card_id
@@ -968,6 +1043,41 @@ def handle_discord_message(message, agent_key, bot_token, bot_user_id)
   prompt_file = File.join(response_dir, "discord-prompt-#{timestamp}-#{agent_key}-#{message_id}.md")
   File.write(prompt_file, prompt)
 
+  # Detect overrides from inline tags — [opus], [effort:high], [cli:grok]
+  # Current message tags override thread defaults; thread defaults apply when no tag is present.
+  cli_provider_override = detect_cli_provider(text: clean_content) || thread_cli_provider
+
+  # For model/effort: detect_model/detect_effort return the project default when no tag matches,
+  # so we check for explicit tag presence to know whether the thread default should apply.
+  has_explicit_model = false
+  if project_config
+    allowed_models = resolve_project_cli_config(project_config)["allowed_models"] || {}
+    model_tag_match = clean_content.match(/\[(\w+)\]/i)
+    has_explicit_model = model_tag_match && allowed_models.key?(model_tag_match[1].downcase)
+  end
+  has_explicit_effort = clean_content.match?(/\[effort:\w+\]/i)
+
+  model = if has_explicit_model
+            detect_model(project_config, text: clean_content)
+          elsif thread_model
+            thread_model
+          else
+            project_config ? detect_model(project_config, text: clean_content) : nil
+          end
+
+  effort = if has_explicit_effort
+             detect_effort(project_config, text: clean_content)
+           elsif thread_effort
+             thread_effort
+           else
+             project_config ? detect_effort(project_config, text: clean_content) : nil
+           end
+
+  # Determine the "explicit" values from this message only (not thread defaults)
+  # for seeding into the thread map on initial dispatch.
+  explicit_model = has_explicit_model ? model : nil
+  explicit_effort = has_explicit_effort ? effort : nil
+
   # Write delivery metadata sidecar so the poller can post this response
   # even if the monitoring thread dies (e.g. server restart).
   meta_file = File.join(DISCORD_DRAFT_DIR, "#{response_basename}.meta.json")
@@ -979,17 +1089,11 @@ def handle_discord_message(message, agent_key, bot_token, bot_user_id)
                                                is_dm: is_dm,
                                                is_thread: is_thread,
                                                clean_content: clean_content[0..80],
+                                               cli_provider: detect_cli_provider(text: clean_content),
+                                               model: explicit_model,
+                                               effort: explicit_effort,
                                                created_at: Time.now.iso8601
                                              }))
-
-  # Detect model override — same [opus]/[sonnet]/[haiku] syntax as Fizzy comments
-  model = project_config ? detect_model(project_config, text: clean_content) : nil
-
-  # Detect effort override — [effort:high] syntax
-  effort = project_config ? detect_effort(project_config, text: clean_content) : nil
-
-  # Detect CLI provider override — [cli:grok] syntax
-  cli_provider_override = detect_cli_provider(text: clean_content)
 
   agent_config_name = agent_key.downcase.gsub(/[^a-z0-9-]/, "-")
   log_file = File.join(response_dir, "discord-agent-#{timestamp}-#{agent_key}-#{message_id}.log")
@@ -1023,14 +1127,12 @@ def handle_discord_message(message, agent_key, bot_token, bot_user_id)
     LOG.info "[Discord:#{agent_name}] Injecting #{agent_env.size} env var(s): #{agent_env.keys.join(", ")}"
   end
 
-  # Capture HEAD before spawning so we can detect if THIS session made commits
+  # Capture HEAD and dirty state before spawning so we can detect if THIS session made changes
   head_before = nil
+  status_before = nil
   if project_config
     pk = PROJECTS.find { |_k, v| v == project_config }&.first
-    if pk == "brainiac"
-      head_before, = Open3.capture2("git", "rev-parse", "HEAD", chdir: work_dir)
-      head_before = head_before.strip
-    end
+    head_before, status_before = capture_git_state(work_dir) if pk == "brainiac"
   end
 
   pid = spawn(spawn_env, *cmd,
@@ -1140,14 +1242,12 @@ def handle_discord_message(message, agent_key, bot_token, bot_user_id)
     brain_push(message: "#{agent_name}: discord-#{message_id}")
 
     # Restart brainiac if THIS session actually changed code
-    # Compare HEAD now vs before the agent ran — only restart if commits were made or files are dirty
+    # Compare HEAD and dirty state now vs before — only restart if the agent made commits or new dirty files
     if project_config && head_before
       project_key = PROJECTS.find { |_k, v| v == project_config }&.first
       if project_key == "brainiac"
-        chdir = project_config["repo_path"]
-        head_after, = Open3.capture2("git", "rev-parse", "HEAD", chdir: chdir)
-        git_status, = Open3.capture2("git", "status", "--porcelain", chdir: chdir)
-        if head_after.strip != head_before || !git_status.strip.empty?
+        head_after, status_after = capture_git_state(project_config["repo_path"])
+        if head_after != head_before || status_after != status_before
           queue_brainiac_restart(agent_name)
         else
           LOG.info "[Brainiac] #{agent_name} Discord session on brainiac had no changes — skipping restart"
@@ -1721,10 +1821,16 @@ def start_all_discord_gateways
   end
 
   LOG.info "[Discord] Starting #{tokens.size} bot(s): #{tokens.keys.join(", ")}"
-  tokens.each do |agent_key, token|
-    DISCORD_BOTS_MUTEX.synchronize do
+
+  # Register all bots upfront so the "all ready" check sees the full set
+  # before any individual READY event fires.
+  DISCORD_BOTS_MUTEX.synchronize do
+    tokens.each do |agent_key, token|
       DISCORD_BOTS[agent_key] = { token: token, status: "starting", user_id: nil }
     end
+  end
+
+  tokens.each do |agent_key, token|
     start_discord_gateway_for(agent_key, token)
     sleep 1 # Stagger connections to avoid rate limits
   end

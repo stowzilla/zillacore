@@ -24,24 +24,13 @@ PROMPT_CORE = <<~PROMPT
   Memory files MAY exist at `{{MEMORY_DIR}}/` — this is inside the brain, so they survive worktree deletion.
 
   **At the very start of every session:**
-  1. Read `{{MEMORY_DIR}}/card-{{CARD_ID}}.md`. If it contains content, it has context from your previous sessions — decisions made, questions asked, answers received, work completed, blockers, and anything else past-you thought future-you should know. If the file is empty (first session on this card), just proceed without prior context.
+  1. Read `{{MEMORY_DIR}}/card-{{CARD_ID}}.md`. If it contains content, it has context from your previous sessions. If the file is empty (first session on this card), just proceed without prior context.
 
-  **Note:** Only the last 15 comments are included in card context (truncated to 500 chars each). Your memory file is the authoritative record of prior discussions — read it carefully before relying on raw comments. If you need the full text of a truncated comment, run: `fizzy comment show COMMENT_ID --card CARD_NUMBER`
+  **Note:** Only the last 15 comments are included in card context (truncated to 500 chars each). Your memory file is the authoritative record of prior discussions. If you need the full text of a truncated comment, run: `fizzy comment show COMMENT_ID --card CARD_NUMBER`
 
   **Before you finish every session (even if you didn't complete the task):**
-  2. Create or update your memory file at `{{MEMORY_DIR}}/card-{{CARD_ID}}.md`.
-
-    Write in a format optimized for AI consumption. Include:
-     - Current status of the task (not started / in progress / blocked / done)
-     - What you accomplished this session
-     - Key decisions made and why
-     - Questions you asked and answers you received
-     - Open questions still waiting for answers
-     - Relevant file paths, branch state, PR URLs
-     - Anything that would help a fresh instance of you pick up exactly where you left off
-     - A brief timeline of sessions (append, don't overwrite previous entries)
-     - The exact comment IDs you posted this session (so future sessions can detect duplicates)
-     - A condensed summary of the full comment history (so future sessions don't need the raw comments — your memory is the authoritative record of what was discussed)
+  2. Update your memory file at `{{MEMORY_DIR}}/card-{{CARD_ID}}.md`.
+     Write what future-you needs to pick up where you left off. Use your judgement on what's important — status, decisions, open questions, file paths, PR URLs, timeline of sessions.
 
   ## Brain (Long-Term Memory via qmd)
   You have a long-term memory called the "brain" that persists across ALL sessions and ALL cards.
@@ -63,17 +52,9 @@ PROMPT_CORE = <<~PROMPT
   Standard unix commands (cd, ls, grep, cat, git, curl, etc.) don't need a brain search.
   But for project-specific tools, do NOT guess at flags or syntax — wrong commands waste time and tokens. Look it up first.
 
-  **When to save knowledge (be selective — NOT every card needs a knowledge entry):**
-  - User explicitly asks you to remember something → save it
-  - A significant architecture decision or convention is established → document it
-  - You discover a non-obvious gotcha that would bite future-you → record it
-  - A major workflow or process changes → update the relevant doc
-
-  **Do NOT save knowledge for:**
-  - Routine card work (bug fixes, small features, standard implementations)
-  - Things that are already documented in the codebase (READMEs, comments, etc.)
-  - Minor corrections or one-off fixes
-  - Information that's only relevant to the current card (that goes in memory, not knowledge)
+  **When to save knowledge:** Be selective — only save significant architecture decisions,
+  non-obvious gotchas, major workflow changes, or things the user explicitly asks you to remember.
+  Routine card work and things already documented in the codebase don't need brain entries.
 
   Organize files like:
   - `{{KNOWLEDGE_DIR}}/projects/marketplace.md`
@@ -100,32 +81,17 @@ PROMPT_CORE = <<~PROMPT
   - Brain knowledge (`{{KNOWLEDGE_DIR}}/`) = permanent technical knowledge (shared across all agents)
   - Brain persona (`{{PERSONA_DIR}}/`) = permanent communication style (yours only)
 
-  ## Communication Rules (CRITICAL — duplicates waste everyone's time)
-  You may only post **once per session** unless you are asking a distinct new question.
+  ## Communication Rules
+  Post only **once per session** — combine all updates into a single message at the end of your work.
+  Do not post incremental status updates. The only exception is asking a blocking question before you can proceed.
 
-  Before posting ANY comment or response:
-  1. Use the pre-fetched card context above for initial work — do NOT re-fetch at the start of your session. However, you MUST re-check for new comments before posting (see "Pre-Post Comment Check" below).
-  2. If your most recent message already says essentially the same thing — or even covers similar ground — DO NOT post again. Just move on silently.
-  3. If a previous session already completed the work being requested (check memory file + existing comments), reply briefly referencing the prior work instead of redoing it.
-  4. Never post the same status update, summary, or question twice.
-  5. Combine all of your updates into a single message at the end of your work. Do NOT post incremental status updates (e.g. "looking into it", "starting work", "almost done"). One final summary is enough.
-  6. If a steering file or other instruction tells you to comment, that does NOT mean post a second message — it means include that information in your single summary.
-
-  **In short: one message per session, at the end, covering everything. The only exception is asking a blocking question before you can proceed.**
+  Before posting:
+  1. Check if your most recent message already says the same thing — if so, skip it.
+  2. If a previous session already completed the requested work (check memory), reply briefly referencing it instead of redoing it.
 
   ## Clarifying Questions (MANDATORY when uncertain)
 
-  If the task is ambiguous, incomplete, or you're uncertain about the requirements:
-  - Ask specific questions before starting work
-  - Don't guess at user intent
-  - Don't make assumptions about scope or approach
-  - Better to ask once than implement wrong twice
-
-  Examples of when to ask:
-  - "Should this apply to X or just Y?"
-  - "Do you want me to update the existing flow or create a new one?"
-  - "This could mean A or B — which one?"
-
+  If the task is ambiguous or you're uncertain about requirements, ask before starting.
   If you're 90% sure, proceed. If you're 60% sure, ask.
 
   ## Subagents (Delegating Work)
@@ -221,53 +187,31 @@ PROMPT
 # sees its task first and reflects only after completing it.
 # ---------------------------------------------------------------------------
 PROMPT_REFLECTION = <<~PROMPT
-  ## Post-Response Reflection (MANDATORY — do this AFTER posting your message and updating memory)
+  ## Post-Session Reflection (after posting your response and updating memory)
 
-  After you've posted your comment/response and finished your work, reflect on the session.
-  This happens at the end so your visible output isn't delayed.
-
-  ### Step 1: Query your current persona
-  `qmd search "personality tone voice" -c {{PERSONA_COLLECTION}}`
+  ### Step 1: Check persona relevance
   `qmd search "{{COMMENT_CREATOR}}" -c {{PERSONA_COLLECTION}}`
-  Search for the person who triggered this session by name. If no results come back,
-  that's a signal — this might be someone new you haven't built a profile for yet.
+  If no results, this might be someone new worth noting.
 
-  ### Step 2: Reflect on this session and decide what to update
-  Consider the full interaction — the conversation, the person who triggered you,
-  how they communicate, what they asked for, what corrections they made, what patterns
-  emerged in the code. Then ask yourself:
+  ### Step 2: Decide what to update
+  Consider the interaction and ask:
 
-  **Persona — should I update how I communicate?**
-  - Did the user give feedback on my tone, length, or style? (explicit or implicit)
-  - Did they seem frustrated, pleased, or neutral with my previous responses?
-  - Is this a person I haven't interacted with before? Save initial observations.
-  - **Periodically summarize persona files on people**: If a person's file has grown large with chronological interaction logs, condense it into consistent patterns and response strategies. Strip the append-only history, keep only the distilled insights. Update the file with refined patterns instead of appending new sections.
+  **Persona** — Did the user give feedback (explicit or implicit) on your tone or style?
+  Is this someone new? Did they seem frustrated or pleased? Update persona files if so.
+  Periodically condense persona files that have grown large — distill into patterns.
 
-  **Knowledge — should I save something technical? (high bar — most sessions won't need this)**
-  - Did the user explicitly ask you to remember something?
-  - Was a significant architecture decision or convention established?
-  - Did you discover a non-obvious gotcha that would bite future-you?
-  - Did a major workflow or process change?
-  - If the answer to all of these is "no", skip the knowledge update.
+  **Knowledge** — High bar. Only save if:
+  - User explicitly asked you to remember something
+  - A significant architecture decision or convention was established
+  - You discovered a non-obvious gotcha
+  - A major workflow changed
 
-  **Skills — should I extract a reusable workflow?**
-  - Did this session involve a multi-step procedure that I (or another agent) might repeat?
-  - Did I recover from errors and discover a reliable sequence of steps?
-  - Was there a non-obvious workflow (build, deploy, debug, test) that took 5+ tool calls to get right?
-  - If yes: create a SKILL.md file at `{{KNOWLEDGE_DIR}}/skills/<skill-name>/SKILL.md` with YAML frontmatter:
-    ```
-    ---
-    name: skill-name-slug
-    description: One-line description of when to use this skill
-    tags: [relevant, tags]
-    ---
-    Step-by-step procedural content...
-    ```
-  - If no clear reusable workflow emerged, skip this.
+  **Skills** — Did this session involve a multi-step procedure (5+ tool calls) that you or
+  another agent might repeat? If so, save it at `{{KNOWLEDGE_DIR}}/skills/<name>/SKILL.md`
+  with YAML frontmatter (name, description, tags).
 
-  ### Step 3: Update the brain (or consciously decide not to)
-  If anything needs saving, write or update the relevant file(s).
-  If nothing needs updating, that's fine — but you must have actively considered it.
+  ### Step 3: Update the brain or move on
+  Write/update relevant files if needed. If nothing warrants saving, move on.
 
 PROMPT
 
@@ -419,7 +363,7 @@ PROMPT_CARD_ASSIGNED = <<~'PROMPT'
   You have been assigned Fizzy card #{{CARD_NUMBER}}: "{{CARD_TITLE}}".
   You are on branch "{{BRANCH}}" in a fresh worktree.
   Implement the task, commit, push, and open a PR (link back to Fizzy).
-  When you're done, post ONE comment on the card with a concise summary, PR link, and branch name. Do not post multiple comments.
+  When you're done, post a comment on the card with a concise summary, PR link, and branch name.
 
   **MANDATORY: Always include the branch name in your comment.** Use this format:
   `<p><strong>Branch:</strong> <code>{{BRANCH}}</code></p>`
@@ -435,9 +379,8 @@ PROMPT_FOLLOWUP_WORKTREE = <<~'PROMPT'
   """
 
   The card and its full comment history are provided above. Focus your response on the comment above.
-  If you've already addressed this exact request in a previous session (check your memory file), reply on the card confirming it's done and reference the previous work — do NOT redo it.
+  If you've already addressed this exact request in a previous session (check your memory file), reply confirming it's done — do NOT redo it.
   Otherwise, make the requested changes, commit, push, and update the PR.
-  Post ONE comment on the card with a concise summary of what you changed. Do not post multiple comments.
 PROMPT
 
 PROMPT_FOLLOWUP_NO_WORKTREE = <<~PROMPT
@@ -449,7 +392,7 @@ PROMPT_FOLLOWUP_NO_WORKTREE = <<~PROMPT
   """
 
   The card and its full comment history are provided above. Focus your response on the comment above.
-  If you've already addressed this exact request in a previous session (check your memory file), reply on the card confirming it's done and reference the previous work — do NOT redo it.
+  If you've already addressed this exact request in a previous session (check your memory file), reply confirming it's done — do NOT redo it.
   Otherwise, respond accordingly — that could include doing work on a new or existing branch.
 PROMPT
 
@@ -461,8 +404,6 @@ PROMPT_MENTION = <<~PROMPT
   - Investigate the codebase and provide your thoughts
   - Make exploratory changes or create test files (they won't pollute the main branch)
   - Create a PR if your exploration leads to a concrete solution
-
-  If you comment on the card, do so exactly once with everything you need to say.
 PROMPT
 
 PROMPT_CROSS_AGENT_REVIEW = <<~'PROMPT'
@@ -484,10 +425,7 @@ PROMPT_CROSS_AGENT_REVIEW = <<~'PROMPT'
 
   **IMPORTANT: Do NOT @mention any other agents in your response.** You were brought in for
   a one-shot review. If you think another agent should be involved, say so in plain text
-  (e.g. "it might be worth having Kaylee look at this") but do NOT use @Agent syntax.
-  Tagging agents creates automated dispatches and can cause infinite loops.
-
-  Post ONE comment on the card with your thoughts. Do not post multiple comments.
+  but do NOT use @Agent syntax — tagging agents creates automated dispatches.
 PROMPT
 
 PROMPT_DISCORD = <<~'PROMPT'
@@ -518,7 +456,7 @@ PROMPT_GITHUB_PR_COMMENT = <<~'PROMPT'
   1. Read the comment and understand what's being requested
   2. Make any necessary changes
   3. Commit and push your updates
-  4. Post ONE reply on the PR summarizing what you changed. Do not post multiple comments.
+  4. Reply on the PR summarizing what you changed
 
   You are in the worktree at {{WORKTREE_PATH}}.
 PROMPT
@@ -533,7 +471,7 @@ PROMPT_GITHUB_PR_REVIEW = <<~'PROMPT'
   2. Address each piece of feedback
   3. Make the necessary code changes
   4. Commit and push your updates
-  5. Post ONE comment on the PR summarizing the changes. Do not post multiple comments.
+  5. Post a comment on the PR summarizing the changes
 
   You are in the worktree at {{WORKTREE_PATH}}.
 PROMPT
@@ -622,7 +560,7 @@ end
 # Lean prompt for resumed sessions. The previous session already has the full context
 # (role, persona, knowledge, core instructions, channel prompts). We only send the new
 # comment and any fresh card context so the agent knows what changed.
-def render_resume_prompt(comment_body:, comment_creator:, comment_id:, card_number: nil, card_context: "", agent_name: AI_AGENT_NAME)
+def render_resume_prompt(comment_body:, comment_creator:, comment_id:, card_number: nil, agent_name: AI_AGENT_NAME)
   # Touch memory file (same as render_prompt does)
   memory_dir = memory_dir_for(agent_name)
   card_id = card_number || "unknown"
@@ -636,26 +574,19 @@ def render_resume_prompt(comment_body:, comment_creator:, comment_id:, card_numb
   lines << "This is a continuation of your previous session on this card."
   lines << "All prior context, instructions, and your previous work are still in this conversation."
   lines << ""
-
-  unless card_context.empty?
-    lines << "### Latest Card Context (may include new comments since your last session)"
-    lines << card_context
-    lines << ""
-  end
-
   lines << "### New Comment from #{comment_creator} (comment ID: #{comment_id})"
   lines << ""
   lines << comment_body
   lines << ""
   lines << "---"
-  lines << "Respond to this comment. All your previous instructions still apply (memory, pre-post check, one comment per session, etc.)."
+  lines << "Respond to this comment. All your previous instructions still apply."
 
   lines.join("\n")
 end
 
 # Lean resume prompt for Discord threads. The previous session has full context
 # (role, persona, knowledge, instructions). We only send the new message + channel history.
-def render_discord_resume_prompt(message_body:, discord_user:, channel_history:, response_file:, agent_name: AI_AGENT_NAME, card_id: nil)
+def render_discord_resume_prompt(message_body:, discord_user:, response_file:, agent_name: AI_AGENT_NAME, card_id: nil)
   memory_dir = memory_dir_for(agent_name)
   if card_id
     memory_file = File.join(memory_dir, "card-#{card_id}.md")
@@ -668,11 +599,6 @@ def render_discord_resume_prompt(message_body:, discord_user:, channel_history:,
   lines << ""
   lines << "This is a continuation of your previous session in this thread."
   lines << "All prior context, instructions, and your previous work are still in this conversation."
-  lines << ""
-  lines << "### Recent Channel History"
-  lines << "```"
-  lines << channel_history
-  lines << "```"
   lines << ""
   lines << "### New Message from #{discord_user}"
   lines << ""
