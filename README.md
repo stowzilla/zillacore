@@ -1,10 +1,10 @@
 # Brainiac
 
-A webhook receiver that listens for [Fizzy](https://fizzy.do), GitHub, Discord, and Zoho Mail events, then dispatches work to AI agent CLIs. Each agent has its own persona, brain, and voice — they collaborate on the same projects through @mentions.
+Brainiac is a multi-agent orchestration layer for developer workflows. It connects your tools (Fizzy, GitHub, Discord, Zoho) to a team of autonomous AI agents. By managing personas, shared knowledge, and collaborative workflows via @mentions, Brainiac allows you to deploy and manage a unified fleet of AI experts directly from your CLI.
 
 ## How It Works
 
-Webhook events trigger the receiver to spawn an AI agent CLI with a natural language prompt. The receiver can dispatch multiple agents — each with a unique personality and kiro-cli config. Agents are discovered from `~/.kiro/agents/`, and projects registered in `~/.brainiac/projects.json`. Config reloads dynamically, no restart needed.
+Brainiac listens for incoming events and automatically spawns the appropriate AI agent CLI to handle the request. Because each agent maintains its own unique persona and configuration, you can deploy a specialized team—all managed through ~/.kiro/agents/. Project tracking is handled via ~/.brainiac/projects.json, and because the system reloads configurations dynamically, you can iterate on your agent workflows in real-time without ever needing a restart.
 
 ### Events
 
