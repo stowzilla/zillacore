@@ -10,10 +10,6 @@ Gem::Specification.new do |s|
   s.license     = "MIT"
   s.required_ruby_version = ">= 3.4"
 
-  s.cert_chain = ["certs/stowzilla.pem"]
-  signing_key_path = File.expand_path("~/.ssh/gem-private_key.pem")
-  s.signing_key = signing_key_path if File.exist?(signing_key_path)
-
   s.files = `git ls-files -z`.split("\x0").reject { |f| f.start_with?("test/", "tmp/", ".") }
   s.executables = ["brainiac"]
 
