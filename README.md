@@ -4,7 +4,7 @@ Brainiac is a multi-agent orchestration layer for developer workflows. It connec
 
 ## How It Works
 
-Webhook events trigger the receiver to spawn an AI agent CLI with a natural language prompt. The receiver can dispatch multiple agents — each with a unique personality and kiro-cli config. Agents are discovered from `~/.kiro/agents/`, and projects registered in `~/.brainiac/projects.json`. Config reloads dynamically, no restart needed.
+Brainiac listens for incoming events and automatically spawns the appropriate AI agent CLI to handle the request. Because each agent maintains its own unique persona and configuration, you can deploy a specialized team—all managed through ~/.kiro/agents/. Project tracking is handled via ~/.brainiac/projects.json, and because the system reloads configurations dynamically, you can iterate on your agent workflows in real-time without ever needing a restart.
 
 ### Events
 
