@@ -1436,23 +1436,136 @@ when "agent"
       end
     end
 
+  when "create", "add"
+    name = ARGV.shift
+    unless name
+      puts "Usage: brainiac agent create <name> [options]"
+      puts ""
+      puts "Options:"
+      puts "  --local              Mark agent as local (dispatches on this machine)"
+      puts "  --role <role>        Assign a role (repeatable)"
+      puts "  --cli <provider>     Set CLI provider (default: kiro)"
+      puts "  --persona <text>     Create a persona style file with this description"
+      puts ""
+      puts "Examples:"
+      puts "  brainiac agent create SecurityBot --local --role code-reviewer"
+      puts "  brainiac agent create Jane --role general-engineer --cli grok"
+      puts "  brainiac agent create Avon --persona \"Dry wit, sardonic, brilliant\""
+      exit 1
+    end
+
+    agent_key = name.downcase.gsub(/[^a-z0-9-]/, "-")
+    registry = File.exist?(agent_registry_file) ? JSON.parse(File.read(agent_registry_file)) : {}
+
+    if registry[agent_key]
+      puts "Agent '#{name}' already exists. Use 'brainiac agent #{agent_key} show' to view."
+      exit 1
+    end
+
+    # Parse options
+    local = false
+    roles = []
+    cli_provider = nil
+    persona_text = nil
+
+    while ARGV.any?
+      case ARGV[0]
+      when "--local"
+        ARGV.shift
+        local = true
+      when "--role"
+        ARGV.shift
+        roles << ARGV.shift
+      when "--cli"
+        ARGV.shift
+        cli_provider = ARGV.shift
+      when "--persona"
+        ARGV.shift
+        persona_text = ARGV.shift
+      else
+        puts "Unknown option: #{ARGV[0]}"
+        exit 1
+      end
+    end
+
+    entry = { "fizzy_name" => name }
+    entry["local"] = true if local
+    entry["cli_provider"] = cli_provider if cli_provider
+    entry["role"] = roles.size == 1 ? roles.first : roles if roles.any?
+
+    registry[agent_key] = entry
+    File.write(agent_registry_file, JSON.pretty_generate(registry))
+    puts "✓ Created agent '#{name}' (#{agent_key})"
+    puts "  Local: #{local}" if local
+    puts "  Role: #{roles.join(", ")}" if roles.any?
+    puts "  CLI: #{cli_provider}" if cli_provider
+
+    # Create persona directory and style file if requested
+    if persona_text
+      persona_dir = File.join(BRAINIAC_DIR, "brain", "persona", agent_key)
+      FileUtils.mkdir_p(persona_dir)
+      persona_file = File.join(persona_dir, "style.md")
+      unless File.exist?(persona_file)
+        File.write(persona_file, <<~MD)
+          ---
+          name: #{agent_key}-style
+          description: Persona voice for #{name}.
+          ---
+          # #{name} — Persona
+          #{persona_text}
+        MD
+        puts "  Persona: #{persona_file}"
+      end
+    end
+
+  when "remove", "delete", "rm"
+    name = ARGV.shift
+    unless name
+      puts "Usage: brainiac agent remove <name>"
+      exit 1
+    end
+
+    agent_key = name.downcase.gsub(/[^a-z0-9-]/, "-")
+    registry = File.exist?(agent_registry_file) ? JSON.parse(File.read(agent_registry_file)) : {}
+
+    unless registry[agent_key]
+      puts "Agent '#{name}' not found in registry."
+      exit 1
+    end
+
+    display = registry[agent_key]["fizzy_name"] || name
+    registry.delete(agent_key)
+    File.write(agent_registry_file, JSON.pretty_generate(registry))
+    puts "✓ Removed agent '#{display}' (#{agent_key}) from registry"
+    puts "  Note: Persona files at ~/.brainiac/brain/persona/#{agent_key}/ were not deleted."
+
   when nil
     puts <<~HELP
       Usage: brainiac agent <name> <command> [args]
              brainiac agent list
+             brainiac agent create <name> [options]
+             brainiac agent remove <name>
 
       Commands:
         list                              List all agents in the registry
+        create <name> [options]           Add a new agent to the registry
+        remove <name>                     Remove an agent from the registry
         <name> show                       Show agent configuration (tokens redacted)
         <name> env <KEY> <VALUE>          Set an env var for an agent
         <name> env                        List env vars for an agent
         <name> env --delete <KEY>         Remove an env var from an agent
 
+      Create options:
+        --local              Mark agent as local (dispatches on this machine)
+        --role <role>        Assign a role (repeatable)
+        --cli <provider>     Set CLI provider (default: kiro)
+        --persona <text>     Create a persona style file
+
       Examples:
+        brainiac agent create SecurityBot --local --role code-reviewer
+        brainiac agent create Jane --cli grok
+        brainiac agent remove SecurityBot
         brainiac agent galen env FIZZY_TOKEN fizzy_abc123
-        brainiac agent galen env DISCORD_BOT_TOKEN Bot_xyz789
-        brainiac agent galen env
-        brainiac agent galen env --delete DISCORD_BOT_TOKEN
         brainiac agent galen show
     HELP
 

@@ -73,13 +73,19 @@ _brainiac() {
     agent)
       case $cword in
         2)
-          COMPREPLY=($(compgen -W "list $(_brainiac_agents)" -- "$cur"))
+          COMPREPLY=($(compgen -W "list create remove $(_brainiac_agents)" -- "$cur"))
           ;;
         3)
           local agent_name="${words[2]}"
-          if [[ "$agent_name" != "list" ]]; then
-            COMPREPLY=($(compgen -W "show env" -- "$cur"))
-          fi
+          case "$agent_name" in
+            list|remove|delete|rm) ;;
+            create|add)
+              COMPREPLY=($(compgen -W "--local --role --cli --persona" -- "$cur"))
+              ;;
+            *)
+              COMPREPLY=($(compgen -W "show env" -- "$cur"))
+              ;;
+          esac
           ;;
         4)
           local subcmd="${words[3]}"
