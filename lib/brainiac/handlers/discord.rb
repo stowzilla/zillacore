@@ -742,6 +742,14 @@ def handle_discord_message(message, agent_key, bot_token, bot_user_id)
   # Strip CLI provider tag (e.g. [cli:grok]) from prompt content
   clean_content_for_prompt = clean_content_for_prompt.sub(/\[cli:\w+\]/i, "").strip
 
+  # Detect chat mode tag: [chat], [question], [?] — skips worktree, uses tmp dir instead
+  chat_mode = clean_content.match?(/\[(chat|question|\?)\]/i)
+  if chat_mode
+    clean_content = clean_content.sub(/\[(chat|question|\?)\]/i, "").strip
+    clean_content_for_prompt = clean_content_for_prompt.sub(/\[(chat|question|\?)\]/i, "").strip
+    LOG.info "[Discord:#{agent_name}] Chat mode detected — will skip worktree creation"
+  end
+
   # Find project: inline override > channel mapping > default_project
   if inline_project_key && PROJECTS.key?(inline_project_key)
     project_key = inline_project_key
@@ -927,7 +935,21 @@ def handle_discord_message(message, agent_key, bot_token, bot_user_id)
     thread_map = DISCORD_THREAD_MAP_MUTEX.synchronize { load_discord_thread_map }
     existing = thread_map[thread_map_key]
 
-    if existing && existing["worktree"] && File.directory?(existing["worktree"])
+    if existing && existing["chat_mode"]
+      # Thread was started in chat mode — reuse the tmp dir, don't create a worktree
+      thread_worktree_path = existing["worktree"]
+      thread_cli_provider = existing["cli_provider"]
+      thread_model = existing["model"]
+      thread_effort = existing["effort"]
+      chat_mode = true
+      effective_provider = detect_cli_provider(text: clean_content) || thread_cli_provider
+      resolved_for_resume = resolve_project_cli_config(project_config, cli_provider_override: effective_provider, agent_name: agent_name)
+      should_resume = resolved_for_resume["resume_flag"] ? true : false
+      LOG.info "[Discord:#{agent_name}] Reusing chat mode tmp dir at #{thread_worktree_path} (resume: #{should_resume})"
+    elsif chat_mode
+      # New chat mode session — skip worktree, tmp dir will be created below
+      LOG.info "[Discord:#{agent_name}] Chat mode — skipping worktree creation"
+    elsif existing && existing["worktree"] && File.directory?(existing["worktree"])
       # Existing worktree — resume session. Inherit tags from the thread's first dispatch.
       thread_worktree_path = existing["worktree"]
       thread_cli_provider = existing["cli_provider"]
@@ -989,6 +1011,31 @@ def handle_discord_message(message, agent_key, bot_token, bot_user_id)
     end
   end
 
+  # Chat mode: create a tmp directory instead of a worktree for lightweight conversational sessions
+  if chat_mode && !thread_worktree_path && thread_map_key
+    chat_tmp_dir = File.join(BRAINIAC_DIR, "tmp", "chat", "#{agent_key}-#{effective_thread_id}")
+    FileUtils.mkdir_p(chat_tmp_dir)
+    thread_worktree_path = chat_tmp_dir
+
+    first_cli_provider = detect_cli_provider(text: clean_content)
+    first_model = project_config ? detect_model(project_config, text: clean_content) : nil
+    first_effort = project_config ? detect_effort(project_config, text: clean_content) : nil
+    thread_cli_provider = first_cli_provider
+    thread_model = first_model
+    thread_effort = first_effort
+
+    DISCORD_THREAD_MAP_MUTEX.synchronize do
+      map = load_discord_thread_map
+      map[thread_map_key] = { "worktree" => chat_tmp_dir, "chat_mode" => true,
+                              "project" => PROJECTS.find { |_k, v| v == project_config }&.first,
+                              "channel_id" => effective_thread_id, "cli_provider" => first_cli_provider,
+                              "model" => first_model, "effort" => first_effort,
+                              "created_at" => Time.now.iso8601 }
+      save_discord_thread_map(map)
+    end
+    LOG.info "[Discord:#{agent_name}] Created chat mode tmp dir at #{chat_tmp_dir}"
+  end
+
   if should_resume && thread_worktree_path
     # Lean resume prompt — prior session has full context
     prompt = render_discord_resume_prompt(
@@ -1036,6 +1083,15 @@ def handle_discord_message(message, agent_key, bot_token, bot_user_id)
                            brain_context: brain_context,
                            agent_name: agent_name,
                            channel: :discord)
+  end
+
+  # Chat mode fallback: if no thread_map_key was available (no thread created, e.g. DM or no project),
+  # still use a tmp dir so we don't fall back to the project repo_path.
+  if chat_mode && !thread_worktree_path
+    chat_tmp_dir = File.join(BRAINIAC_DIR, "tmp", "chat", "#{agent_key}-#{message_id}")
+    FileUtils.mkdir_p(chat_tmp_dir)
+    thread_worktree_path = chat_tmp_dir
+    LOG.info "[Discord:#{agent_name}] Chat mode fallback tmp dir at #{chat_tmp_dir}"
   end
 
   work_dir = thread_worktree_path || (project_config ? project_config["repo_path"] : Dir.pwd)
