@@ -50,7 +50,7 @@ Metrics/PerceivedComplexity:
     - "monitor/**/*"
 
 Metrics/ClassLength:
-  Max: 300
+  Max: 150
 
 Metrics/BlockNesting:
   Max: 5
@@ -91,9 +91,10 @@ Gemspec/DevelopmentDependencies:
   Enabled: false
 
 Layout/LineLength:
-  Max: 300
+  Max: 150
   Exclude:
     - "receiver.rb"
+    - "lib/brainiac/handlers/**/*"
 
 # Handler methods often have unused params from Sinatra/block signatures
 Lint/UnusedMethodArgument:

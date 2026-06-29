@@ -96,20 +96,14 @@ def handle_comment(payload)
   return [200, { status: "ignored", reason: "no matching project" }.to_json] unless project_config
 
   # Parse inline tags
-  deploy_intent = nil
-  if (deploy_match = plain_text.match(/\[deploy(?::([^\]]+))?\]/i))
-    deploy_intent = deploy_match[1]&.strip&.downcase || :auto
-    plain_text = plain_text.sub(deploy_match[0], "").strip
-    LOG.info "[Deploy] Detected [deploy#{":#{deploy_intent}" unless deploy_intent == :auto}] tag on card #{card_internal_id}"
-  end
+  tags = parse_inline_tags(plain_text)
+  deploy_intent = tags[:deploy_intent]
+  LOG.info "[Deploy] Detected [deploy#{":#{deploy_intent}" unless deploy_intent == :auto}] tag on card #{card_internal_id}" if deploy_intent
 
-  effort_text_for_detection = plain_text
-  plain_text = plain_text.sub(/\[effort:\w+\]/i, "").strip
-
-  # [worktree:branch-name] override
+  # [worktree:branch-name] override — validate directory exists
   worktree_override = nil
-  if (wt_match = plain_text.match(/\[worktree:([^\]]+)\]/))
-    override_branch = wt_match[1].strip
+  if tags[:worktree_override]
+    override_branch = tags[:worktree_override]
     repo_path_for_override = project_config["repo_path"]
     candidate = File.join(File.dirname(repo_path_for_override), "#{File.basename(repo_path_for_override)}--#{override_branch}")
     if File.directory?(candidate)
@@ -122,9 +116,9 @@ def handle_comment(payload)
 
   card_tags = eventable.dig("card", "tags") || []
   model = detect_model(project_config, text: plain_text)
-  effort = detect_effort(project_config, tags: card_tags, text: effort_text_for_detection)
+  effort = detect_effort(project_config, tags: card_tags, text: plain_text)
   cli_provider_override = detect_cli_provider(text: plain_text, tags: card_tags)
-  plain_text = plain_text.sub(/\[cli:\w+\]/i, "").strip
+  plain_text = tags[:clean_text]
 
   # --- Determine agent ---
   agent_name, is_cross_agent_mention = resolve_comment_agent(

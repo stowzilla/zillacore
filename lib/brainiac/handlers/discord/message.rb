@@ -84,24 +84,12 @@ def handle_discord_message(message, agent_key, bot_token, bot_user_id)
   return unless authorize_discord_user(discord_user, discord_user_id, message, channel_id, message_id, agent_name, bot_token)
 
   # --- Inline tag parsing ---
-  inline_project_key = nil
-  if (proj_match = clean_content.match(/\[project:(\S+)\]/i))
-    inline_project_key = proj_match[1]
-    clean_content = clean_content.sub(proj_match[0], "").strip
-    LOG.info "[Discord:#{agent_name}] Detected inline project tag: #{inline_project_key}"
-  end
-
-  inline_model_tag = clean_content.match(/\[\w+\]/)
-  clean_content_for_prompt = inline_model_tag ? clean_content.sub(inline_model_tag[0], "").strip : clean_content
-  clean_content_for_prompt = clean_content_for_prompt.sub(/\[effort:\w+\]/i, "").strip
-  clean_content_for_prompt = clean_content_for_prompt.sub(/\[cli:\w+\]/i, "").strip
-
-  chat_mode = clean_content.match?(/\[(chat|question|\?)\]/i)
-  if chat_mode
-    clean_content = clean_content.sub(/\[(chat|question|\?)\]/i, "").strip
-    clean_content_for_prompt = clean_content_for_prompt.sub(/\[(chat|question|\?)\]/i, "").strip
-    LOG.info "[Discord:#{agent_name}] Chat mode detected — will skip worktree creation"
-  end
+  tags = parse_inline_tags(clean_content)
+  inline_project_key = tags[:project]
+  chat_mode = tags[:chat_mode]
+  clean_content_for_prompt = tags[:clean_text]
+  LOG.info "[Discord:#{agent_name}] Detected inline project tag: #{inline_project_key}" if inline_project_key
+  LOG.info "[Discord:#{agent_name}] Chat mode detected — will skip worktree creation" if chat_mode
 
   # --- Project resolution ---
   project_key, project_config = resolve_discord_project(inline_project_key, parent_channel_id, agent_name, channel_id, message_id, bot_token)
@@ -625,28 +613,9 @@ def manage_discord_worktree(agent_key:, agent_name:, channel_id:, message_id:, i
 
       thread_slug = effective_thread_id[-8..]
       branch = "discord-#{agent_key}-#{thread_slug}"
-      thread_worktree_path = File.join(File.dirname(repo_path), "#{File.basename(repo_path)}--#{branch}")
 
       debounced_repo_fetch(repo_path)
-      default_branch = get_default_branch(repo_path)
-
-      branch_exists = system("git", "rev-parse", "--verify", branch, chdir: repo_path, out: File::NULL, err: File::NULL)
-
-      if branch_exists
-        worktree_list = run_cmd("git", "worktree", "list", "--porcelain", chdir: repo_path)
-        has_worktree = worktree_list.lines.any? { |l| l.strip == "worktree #{thread_worktree_path}" }
-        if has_worktree && File.directory?(thread_worktree_path)
-          LOG.info "[Discord:#{agent_name}] Reusing existing worktree at #{thread_worktree_path}"
-        else
-          run_cmd("git", "worktree", "add", thread_worktree_path, branch, chdir: repo_path)
-        end
-      else
-        run_cmd("git", "worktree", "add", "-b", branch, thread_worktree_path, "origin/#{default_branch}", chdir: repo_path)
-      end
-
-      trust_version_manager(thread_worktree_path, chdir: thread_worktree_path)
-      apply_worktree_includes(repo_path, thread_worktree_path)
-      run_project_hook(repo_path, "worktree-setup", extra_env: { "WORKTREE_PATH" => thread_worktree_path })
+      thread_worktree_path = create_or_reuse_worktree(repo_path: repo_path, branch: branch)
 
       first_cli_provider = detect_cli_provider(text: clean_content) || seeded_cli_provider
       first_model = (project_config ? detect_model(project_config, text: clean_content) : nil) || seeded_model

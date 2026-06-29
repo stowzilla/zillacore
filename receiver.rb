@@ -20,7 +20,6 @@ require_relative "lib/brainiac/planning"
 require_relative "lib/brainiac/helpers"
 require_relative "lib/brainiac/cron"
 require_relative "lib/brainiac/restart"
-require_relative "lib/brainiac/handlers/shared/config_store"
 require_relative "lib/brainiac/handlers/shared/worktrees"
 require_relative "lib/brainiac/handlers/shared/inline_tags"
 
