@@ -2144,6 +2144,160 @@ when "completions"
     puts File.read(completion_file)
   end
 
+when "install"
+  name = ARGV.shift
+  unless name
+    puts "Usage: brainiac install <plugin-name>"
+    puts ""
+    puts "Installs a Brainiac plugin gem (brainiac-<name>) and registers it."
+    puts ""
+    puts "Examples:"
+    puts "  brainiac install whatsapp     # installs brainiac-whatsapp gem"
+    puts "  brainiac install slack         # installs brainiac-slack gem"
+    puts ""
+    puts "After installing, restart the server: brainiac restart"
+    exit 1
+  end
+
+  # Strip "brainiac-" prefix if user includes it
+  name = name.sub(/^brainiac-/, "")
+  version = nil
+
+  # Check for --version flag
+  if ARGV[0] == "--version" || ARGV[0] == "-v"
+    ARGV.shift
+    version = ARGV.shift
+  end
+
+  plugins_file = File.join(BRAINIAC_DIR, "plugins.json")
+  plugins_config = if File.exist?(plugins_file)
+                     JSON.parse(File.read(plugins_file))
+                   else
+                     { "plugins" => [] }
+                   end
+
+  existing = (plugins_config["plugins"] || []).find { |p| (p.is_a?(Hash) ? p["name"] : p.to_s) == name }
+  if existing
+    puts "Plugin '#{name}' is already installed."
+    puts "  To reinstall: brainiac uninstall #{name} && brainiac install #{name}"
+    exit 0
+  end
+
+  gem_name = "brainiac-#{name}"
+  puts "Installing #{gem_name}..."
+
+  install_cmd = "gem install #{gem_name}"
+  install_cmd += " --version '#{version}'" if version
+
+  system(install_cmd)
+  unless $?.success?
+    puts ""
+    puts "Failed to install #{gem_name}."
+    puts "  Check that the gem exists: https://rubygems.org/gems/#{gem_name}"
+    exit 1
+  end
+
+  # Register in plugins.json
+  plugins_config["plugins"] ||= []
+  entry = { "name" => name, "gem" => gem_name, "installed_at" => Time.now.iso8601 }
+  entry["version"] = version if version
+  plugins_config["plugins"] << entry
+
+  ensure_brainiac_dir
+  File.write(plugins_file, JSON.pretty_generate(plugins_config))
+
+  # Enable the handler
+  update_handler_config(name, true)
+
+  puts ""
+  puts "✓ Installed plugin '#{name}' (#{gem_name})"
+  puts "  Restart the server to activate: brainiac restart"
+
+when "uninstall"
+  name = ARGV.shift
+  unless name
+    puts "Usage: brainiac uninstall <plugin-name>"
+    puts ""
+    puts "Removes a Brainiac plugin from the configuration."
+    puts "The gem itself remains installed (use 'gem uninstall brainiac-<name>' to fully remove)."
+    exit 1
+  end
+
+  name = name.sub(/^brainiac-/, "")
+  gem_name = "brainiac-#{name}"
+
+  plugins_file = File.join(BRAINIAC_DIR, "plugins.json")
+  unless File.exist?(plugins_file)
+    puts "Plugin '#{name}' is not installed (no plugins.json found)."
+    exit 1
+  end
+
+  plugins_config = JSON.parse(File.read(plugins_file))
+  found = (plugins_config["plugins"] || []).any? { |p| (p.is_a?(Hash) ? p["name"] : p.to_s) == name }
+
+  unless found
+    puts "Plugin '#{name}' is not installed."
+    exit 1
+  end
+
+  plugins_config["plugins"].reject! { |p| (p.is_a?(Hash) ? p["name"] : p.to_s) == name }
+  File.write(plugins_file, JSON.pretty_generate(plugins_config))
+
+  # Disable the handler
+  update_handler_config(name, false)
+
+  puts "✓ Removed plugin '#{name}' from Brainiac."
+  puts "  The gem #{gem_name} is still installed system-wide."
+  puts "  To fully remove: gem uninstall #{gem_name}"
+  puts "  Restart the server to apply: brainiac restart"
+
+when "plugins"
+  plugins_cmd = ARGV.shift
+
+  case plugins_cmd
+  when "list", "ls", nil
+    plugins_file = File.join(BRAINIAC_DIR, "plugins.json")
+    plugins_config = if File.exist?(plugins_file)
+                       JSON.parse(File.read(plugins_file))
+                     else
+                       { "plugins" => [] }
+                     end
+
+    plugins = plugins_config["plugins"] || []
+    if plugins.empty?
+      puts "No plugins installed."
+      puts ""
+      puts "Install plugins with: brainiac install <name>"
+      puts "  Example: brainiac install whatsapp"
+    else
+      puts "Installed plugins:"
+      plugins.each do |p|
+        entry = p.is_a?(Hash) ? p : { "name" => p.to_s }
+        name = entry["name"]
+        gem_name = entry["gem"] || "brainiac-#{name}"
+        version = entry["version"] || "latest"
+        installed_at = entry["installed_at"] ? " (#{entry["installed_at"][0..9]})" : ""
+
+        # Check if gem is actually loadable
+        loadable = begin
+          Gem::Specification.find_by_name(gem_name)
+          "✓"
+        rescue Gem::MissingSpecError
+          "✗ (gem not found)"
+        end
+
+        puts "  #{loadable} #{name} (#{gem_name} #{version})#{installed_at}"
+      end
+    end
+  else
+    puts "Usage: brainiac plugins [list]"
+    puts ""
+    puts "Managing plugins:"
+    puts "  brainiac install <name>       Install a plugin"
+    puts "  brainiac uninstall <name>     Remove a plugin"
+    puts "  brainiac plugins              List installed plugins"
+  end
+
 when "version", "--version", "-v"
   puts "brainiac #{BRAINIAC_VERSION}"
 
@@ -2164,6 +2318,9 @@ when "help", "--help", "-h", nil
       brainiac projects list          List all registered projects (alias)
       brainiac projects default <key> Set the default project
       brainiac show <key>             Show project configuration
+      brainiac install <plugin>       Install a Brainiac plugin (gem-based handler)
+      brainiac uninstall <plugin>     Remove an installed plugin
+      brainiac plugins                List installed plugins
       brainiac brain <command>        Manage agent long-term memory (brain)
       brainiac discord <command>      Manage the Discord bot
       brainiac cron <command>         Manage scheduled agent tasks
@@ -2177,6 +2334,11 @@ when "help", "--help", "-h", nil
 
     Server Options:
       -d, --daemon                     Run server in background (detached)
+
+    Plugin Commands:
+      install <name>                   Install a plugin (gem install brainiac-<name>)
+      uninstall <name>                 Remove a plugin
+      plugins                          List installed plugins
 
     Card Map Commands:
       card-map list                    Show all card map entries

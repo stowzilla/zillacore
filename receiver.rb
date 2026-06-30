@@ -78,6 +78,9 @@ if Dir.exist?(CUSTOM_HANDLERS_DIR)
   end
 end
 
+# --- Load gem-based plugins (brainiac-*) ---
+load_plugins!(self)
+
 # --- Sinatra config ---
 set :host_authorization, { permit_all: true }
 
