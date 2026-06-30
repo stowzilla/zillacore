@@ -9,17 +9,17 @@ class TestFizzyCommentRouting < Minitest::Test
     LAST_COMMENT_TIMES.clear
     AGENT_DISPATCH_DEPTH.clear
     save_card_map({
-      "card-internal-1" => {
-        "number" => 42, "branch" => "fizzy-42-test-feature",
-        "worktree" => "/tmp/test-marketplace--fizzy-42-test-feature",
-        "project" => "marketplace", "agent" => "Galen"
-      }
-    })
+                    "card-internal-1" => {
+                      "number" => 42, "branch" => "fizzy-42-test-feature",
+                      "worktree" => "/tmp/test-marketplace--fizzy-42-test-feature",
+                      "project" => "marketplace", "agent" => "Galen"
+                    }
+                  })
   end
 
   def test_deploy_comment_routes_correctly
     payload = build_comment_payload(body: "dev01")
-    status, body = handle_comment(payload)
+    status, = handle_comment(payload)
     assert_equal 200, status
     # Deploy handler would normally run but isn't loaded in test
   end

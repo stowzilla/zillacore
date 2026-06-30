@@ -50,7 +50,7 @@ class TestAgents < Minitest::Test
   def test_local_agent_names_includes_marked_local
     locals = local_agent_names
     assert_includes locals, "Galen"
-    assert locals.any? { |n| n.downcase == "glados" }
+    assert(locals.any? { |n| n.downcase == "glados" })
   end
 
   def test_local_agent_names_excludes_non_local
@@ -61,8 +61,8 @@ class TestAgents < Minitest::Test
   def test_all_agent_names_includes_registered
     names = all_agent_names
     assert names.include?("Galen")
-    assert names.any? { |n| n.downcase == "glados" }
-    assert names.any? { |n| n.downcase == "kaylee" || n == "Kaylee" }
+    assert(names.any? { |n| n.downcase == "glados" })
+    assert(names.any? { |n| n.downcase == "kaylee" || n == "Kaylee" })
   end
 
   def test_detect_mentioned_agent_full_name

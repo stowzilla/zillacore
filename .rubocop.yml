@@ -50,6 +50,7 @@ Metrics/ClassLength:
   Max: 150
   Exclude:
     - "lib/brainiac/handlers/**/*"
+    - "test/**/*"
 
 Metrics/BlockNesting:
   Max: 5
@@ -66,6 +67,7 @@ Style/TopLevelMethodDefinition:
 Style/OneClassPerFile:
   Exclude:
     - "receiver.rb"
+    - "test/**/*"
 
 Style/StringLiterals:
   EnforcedStyle: double_quotes

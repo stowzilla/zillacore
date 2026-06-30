@@ -49,7 +49,18 @@ class TestMultiAgentInteraction < Minitest::Test
     assert session_active?("card-100")
     assert session_active?("card-200")
   ensure
-    [pid1, pid2].each { |p| Process.kill("KILL", p) rescue nil; Process.wait(p) rescue nil }
+    [pid1, pid2].each do |p|
+      begin
+        Process.kill("KILL", p)
+      rescue StandardError
+        nil
+      end
+      begin
+        Process.wait(p)
+      rescue StandardError
+        nil
+      end
+    end
   end
 
   def test_comment_from_agent_vs_human
@@ -65,8 +76,20 @@ class TestMultiAgentInteraction < Minitest::Test
     sleep 0.1
     assert_equal "GLaDOS", RECENT_SESSIONS.first[:agent_name]
   ensure
-    Process.kill("KILL", pid) rescue nil rescue nil
-    Process.wait(pid) rescue nil
+    begin
+      begin
+        Process.kill("KILL", pid)
+      rescue StandardError
+        nil
+      end
+    rescue StandardError
+      nil
+    end
+    begin
+      Process.wait(pid)
+    rescue StandardError
+      nil
+    end
   end
 
   def test_fizzy_display_name_preserves_casing

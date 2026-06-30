@@ -70,8 +70,16 @@ class TestDiscordSessionMechanics < Minitest::Test
     assert result
     assert_equal pid, result[:pid]
   ensure
-    Process.kill("KILL", pid) rescue nil
-    Process.wait(pid) rescue nil
+    begin
+      Process.kill("KILL", pid)
+    rescue StandardError
+      nil
+    end
+    begin
+      Process.wait(pid)
+    rescue StandardError
+      nil
+    end
   end
 
   def test_supersedable_session_not_found_outside_window
@@ -81,8 +89,16 @@ class TestDiscordSessionMechanics < Minitest::Test
     ACTIVE_SESSIONS["discord-galen-ch1-msg1"][:started_at] = Time.now - 120
     assert_nil find_supersedable_session("discord-galen-ch1")
   ensure
-    Process.kill("KILL", pid) rescue nil
-    Process.wait(pid) rescue nil
+    begin
+      Process.kill("KILL", pid)
+    rescue StandardError
+      nil
+    end
+    begin
+      Process.wait(pid)
+    rescue StandardError
+      nil
+    end
   end
 
   def test_discord_dispatch_depth_tracking

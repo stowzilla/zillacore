@@ -59,14 +59,14 @@ class TestConfig < Minitest::Test
   end
 
   def test_file_changed_detects_new_file
-    test_file = File.join(TEST_BRAINIAC_DIR, "config-change-test-#{rand(10000)}.txt")
+    test_file = File.join(TEST_BRAINIAC_DIR, "config-change-test-#{rand(10_000)}.txt")
     File.write(test_file, "v1")
     CONFIG_MTIMES.delete(test_file)
     assert file_changed?(test_file)
   end
 
   def test_file_changed_false_when_unchanged
-    test_file = File.join(TEST_BRAINIAC_DIR, "config-change-test2-#{rand(10000)}.txt")
+    test_file = File.join(TEST_BRAINIAC_DIR, "config-change-test2-#{rand(10_000)}.txt")
     File.write(test_file, "v1")
     CONFIG_MTIMES.delete(test_file)
     file_changed?(test_file)
@@ -74,7 +74,7 @@ class TestConfig < Minitest::Test
   end
 
   def test_file_changed_true_with_force
-    test_file = File.join(TEST_BRAINIAC_DIR, "config-change-test3-#{rand(10000)}.txt")
+    test_file = File.join(TEST_BRAINIAC_DIR, "config-change-test3-#{rand(10_000)}.txt")
     File.write(test_file, "v1")
     CONFIG_MTIMES.delete(test_file)
     file_changed?(test_file)

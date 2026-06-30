@@ -60,8 +60,16 @@ class TestSessions < Minitest::Test
     register_session("card-123", pid, log_file: "/tmp/test.log", agent_name: "Galen")
     assert session_active?("card-123")
   ensure
-    Process.kill("KILL", pid) rescue nil
-    Process.wait(pid) rescue nil
+    begin
+      Process.kill("KILL", pid)
+    rescue StandardError
+      nil
+    end
+    begin
+      Process.wait(pid)
+    rescue StandardError
+      nil
+    end
   end
 
   def test_session_active_cleans_up_dead_process
@@ -98,8 +106,16 @@ class TestSessions < Minitest::Test
     sleep 0.2
     refute session_active?("card-kill-test")
   ensure
-    Process.kill("KILL", pid) rescue nil
-    Process.wait(pid) rescue nil
+    begin
+      Process.kill("KILL", pid)
+    rescue StandardError
+      nil
+    end
+    begin
+      Process.wait(pid)
+    rescue StandardError
+      nil
+    end
   end
 
   def test_kill_session_returns_false_for_nonexistent
@@ -183,8 +199,16 @@ class TestSessions < Minitest::Test
     assert result
     assert_equal pid, result[:pid]
   ensure
-    Process.kill("KILL", pid) rescue nil
-    Process.wait(pid) rescue nil
+    begin
+      Process.kill("KILL", pid)
+    rescue StandardError
+      nil
+    end
+    begin
+      Process.wait(pid)
+    rescue StandardError
+      nil
+    end
   end
 
   def test_find_supersedable_session_ignores_old_sessions
@@ -194,7 +218,15 @@ class TestSessions < Minitest::Test
     ACTIVE_SESSIONS["discord-galen-ch1-msg1"][:started_at] = Time.now - (SUPERSEDE_WINDOW + 10)
     assert_nil find_supersedable_session("discord-galen-ch1")
   ensure
-    Process.kill("KILL", pid) rescue nil
-    Process.wait(pid) rescue nil
+    begin
+      Process.kill("KILL", pid)
+    rescue StandardError
+      nil
+    end
+    begin
+      Process.wait(pid)
+    rescue StandardError
+      nil
+    end
   end
 end

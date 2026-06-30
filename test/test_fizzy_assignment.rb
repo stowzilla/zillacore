@@ -40,8 +40,16 @@ class TestFizzyAssignment < Minitest::Test
     assert_equal 200, status
     assert_includes body, "session already active"
   ensure
-    Process.kill("KILL", pid) rescue nil
-    Process.wait(pid) rescue nil
+    begin
+      Process.kill("KILL", pid)
+    rescue StandardError
+      nil
+    end
+    begin
+      Process.wait(pid)
+    rescue StandardError
+      nil
+    end
   end
 
   def test_no_matching_project_ignored
@@ -53,7 +61,7 @@ class TestFizzyAssignment < Minitest::Test
     original = PROJECTS["brainiac"].dup
     PROJECTS["brainiac"].delete("default")
     # Also remove all fizzy_tags that match
-    status, body = handle_card_assigned(payload)
+    status, = handle_card_assigned(payload)
     # With default project as fallback, it won't return "no matching project"
     # unless we remove the default. Let's just verify routing works.
     assert_equal 200, status
