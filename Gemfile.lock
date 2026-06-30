@@ -1,7 +1,7 @@
 PATH
   remote: .
   specs:
-    brainiac (0.0.9)
+    brainiac (0.0.7)
       puma (~> 7.2)
       rackup (~> 2.3)
       sinatra (~> 4.1)
@@ -90,7 +90,7 @@ DEPENDENCIES
 CHECKSUMS
   ast (2.4.3) sha256=954615157c1d6a382bc27d690d973195e79db7f55e9765ac7c481c60bdb4d383
   base64 (0.3.0) sha256=27337aeabad6ffae05c265c450490628ef3ebd4b67be58257393227588f5a97b
-  brainiac (0.0.9)
+  brainiac (0.0.7)
   event_emitter (0.2.6) sha256=c72697bd5cce9d36594be1972c17f1c9a573236f44303a4d1d548080364e1391
   json (2.19.9) sha256=9b9025b7cdddafa38d316eca0b2358488e42d417045c1b90d216a9fefe46b79a
   language_server-protocol (3.17.0.5) sha256=fd1e39a51a28bf3eec959379985a72e296e9f9acfce46f6a79d31ca8760803cc
