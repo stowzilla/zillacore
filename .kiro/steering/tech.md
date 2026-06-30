@@ -4,6 +4,7 @@
 
 - Ruby 3.4+ (see `.ruby-version`)
 - Packaged as a gem (`brainiac.gemspec`)
+- Extensible via plugin gems (`brainiac-<name>`)
 
 ## Dependencies
 
@@ -22,6 +23,16 @@
 | rake ~> 13.0 | Task runner |
 | rubocop ~> 1.75 | Linter |
 | rubocop-performance ~> 1.25 | Performance cops |
+
+## Plugin Gems
+
+Plugins are separate gems that extend Brainiac:
+
+| Gem | Purpose |
+|-----|---------|
+| brainiac-whatsapp | WhatsApp Business API handler |
+
+Plugins follow the naming convention `brainiac-<name>` and are installed via `brainiac install <name>`.
 
 ## External Tools
 
@@ -56,6 +67,12 @@ brainiac register
 
 # List registered projects
 brainiac list
+
+# Install a plugin
+brainiac install whatsapp
+
+# List plugins
+brainiac plugins
 ```
 
 ## Code Style
@@ -65,3 +82,15 @@ brainiac list
 - No frozen string literal comments required
 - Max line length: 150
 - Top-level method definitions allowed (Sinatra DSL style)
+
+## Plugin Development
+
+Plugins are standard Ruby gems with this contract:
+
+1. Gem named `brainiac-<name>`
+2. Entry file at `lib/brainiac-<name>.rb`
+3. Module at `Brainiac::Plugins::<Name>` (namespace defined in `lib/brainiac.rb`)
+4. `.register(app)` method receives Sinatra app instance
+5. Plugin state tracked in `~/.brainiac/plugins.json`
+
+See `~/Code/brainiac-whatsapp` as a reference implementation.
