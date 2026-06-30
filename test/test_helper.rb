@@ -168,7 +168,8 @@ require_relative "../lib/brainiac/handlers/discord/config"
 
 # Stub functions that need external tools.
 # These redefine methods loaded from lib/ — suppress redefinition warnings.
-verbose, $VERBOSE = $VERBOSE, nil
+verbose = $VERBOSE
+$VERBOSE = nil
 def prefetch_card_context(_card_number, repo_path:, agent_name: nil) = ""
 
 def run_agent(prompt:, agent_name:, worktree:, project_config:, session_key:, log_prefix:, model: nil, effort: nil, source: nil, source_context: nil,

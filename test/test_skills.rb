@@ -13,7 +13,8 @@ KNOWLEDGE_COLLECTION = "brainiac-knowledge" unless defined?(KNOWLEDGE_COLLECTION
 FileUtils.mkdir_p(KNOWLEDGE_DIR)
 LOG = Logger.new(File::NULL) unless defined?(LOG)
 
-verbose, $VERBOSE = $VERBOSE, nil
+verbose = $VERBOSE
+$VERBOSE = nil
 require_relative "../lib/brainiac/skills"
 $VERBOSE = verbose
 
