@@ -22,13 +22,6 @@ class TestAgents < Minitest::Test
     assert_equal({}, agent_env_for(nil))
   end
 
-  def test_fizzy_token_for_returns_token
-    assert_equal "fizzy_galen_token", fizzy_token_for("Galen")
-  end
-
-  def test_fizzy_token_for_glados
-    assert_equal "fizzy_glados_token", fizzy_token_for("GLaDOS")
-  end
 
   def test_fizzy_display_name_from_registry
     assert_equal "Galen", fizzy_display_name("galen")

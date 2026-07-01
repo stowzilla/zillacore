@@ -84,7 +84,9 @@ def agent_display_name(agent_name)
 end
 
 # Backward-compat alias — plugins and older code may reference this.
-alias_method :fizzy_display_name, :agent_display_name
+def fizzy_display_name(agent_name)
+  agent_display_name(agent_name)
+end
 
 # Get the role name(s) configured for an agent in agents.json.
 # Returns an array of role names (may be empty).

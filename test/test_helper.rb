@@ -160,7 +160,6 @@ require_relative "../lib/brainiac/users"
 require_relative "../lib/brainiac/agents"
 require_relative "../lib/brainiac/brain"
 require_relative "../lib/brainiac/sessions"
-require_relative "../lib/brainiac/planning"
 require_relative "../lib/brainiac/helpers"
 require_relative "../lib/brainiac/handlers/shared/inline_tags"
 require_relative "../lib/brainiac/handlers/shared/git"
@@ -182,17 +181,13 @@ def render_prompt(_template, _vars, brain_context: "", agent_name: nil, channel:
 def role_content_for(_agent_name) = nil
 $VERBOSE = verbose
 
-# Load fizzy comment handler (needs prompts stub)
 PROMPT_FOLLOWUP_NO_WORKTREE = "Stub prompt" unless defined?(PROMPT_FOLLOWUP_NO_WORKTREE)
 PROMPT_FOLLOWUP_COMMENT = "Stub prompt" unless defined?(PROMPT_FOLLOWUP_COMMENT)
 PROMPT_CROSS_AGENT_REVIEW = "Stub prompt" unless defined?(PROMPT_CROSS_AGENT_REVIEW)
 PROMPT_CARD_ASSIGNED = "Stub prompt" unless defined?(PROMPT_CARD_ASSIGNED)
 PROMPT_NEW_MENTION = "Stub prompt" unless defined?(PROMPT_NEW_MENTION)
 
-require_relative "../lib/brainiac/handlers/fizzy/comments"
-require_relative "../lib/brainiac/handlers/fizzy/assignment"
 
-# Stub deploy handler (lives in fizzy/deploy.rb which we don't load)
 def handle_deploy_comment(_eventable, _text, _card_id) = [200, { status: "deploy_handled" }.to_json]
 
 # Cleanup

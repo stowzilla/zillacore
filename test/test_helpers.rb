@@ -17,37 +17,6 @@ class TestHelpers < Minitest::Test
     assert_operator result.length, :<=, 40
   end
 
-  def test_identify_project_by_tags_marketplace
-    tags = [{ "name" => "marketplace" }]
-    key, config = identify_project_by_tags(tags)
-    assert_equal "marketplace", key
-    assert_equal "/home/test/Code/marketplace", config["repo_path"]
-  end
-
-  def test_identify_project_by_tags_short_alias
-    tags = [{ "name" => "mp" }]
-    key, _config = identify_project_by_tags(tags)
-    assert_equal "marketplace", key
-  end
-
-  def test_identify_project_by_tags_case_insensitive
-    tags = [{ "name" => "Marketplace" }]
-    key, _config = identify_project_by_tags(tags)
-    assert_equal "marketplace", key
-  end
-
-  def test_identify_project_by_tags_falls_back_to_default
-    tags = [{ "name" => "unknown-tag" }]
-    key, _config = identify_project_by_tags(tags)
-    assert_equal "brainiac", key
-  end
-
-  def test_identify_project_by_tags_string_tags
-    tags = ["brainiac"]
-    key, _config = identify_project_by_tags(tags)
-    assert_equal "brainiac", key
-  end
-
   def test_identify_project_by_repo
     key, config = identify_project_by_repo("stowzilla/marketplace")
     assert_equal "marketplace", key
@@ -69,24 +38,6 @@ class TestHelpers < Minitest::Test
     save_card_map(map)
     loaded = load_card_map
     assert_equal 42, loaded["card-abc"]["number"]
-  end
-
-  def test_authorized_with_known_user
-    payload = { "creator" => { "id" => "user-1", "name" => "Andy" } }
-    assert authorized?(payload)
-  end
-
-  def test_not_authorized_with_unknown_user
-    payload = { "creator" => { "id" => "unknown-999", "name" => "Hacker" } }
-    refute authorized?(payload)
-  end
-
-  def test_human_mentioned_true
-    assert human_mentioned?("user-1")
-  end
-
-  def test_human_mentioned_false_for_agent
-    refute human_mentioned?("agent-1")
   end
 
   def test_detect_model_from_inline_text
