@@ -39,7 +39,7 @@ def handle_discord_message(message, agent_key, bot_token, bot_user_id)
   reply_context = build_reply_context(referenced_message)
   discord_user = author["username"]
   discord_user_id = author["id"]
-  agent_name = fizzy_display_name(agent_key) || agent_key.capitalize
+  agent_name = agent_display_name(agent_key) || agent_key.capitalize
 
   channel_info, is_thread, is_dm = ensure_channel_info(channel_info, is_thread, is_dm, channel_id, bot_token)
   parent_channel_id = is_thread ? channel_info&.dig("parent_id") || channel_id : channel_id
@@ -348,16 +348,16 @@ def validate_cross_agent_dispatch(sender_agent_key, agent_key, mentioned, conten
   return false unless mentioned
 
   if content.match?(/created\s+card\s+#?\d+/i) || content.match?(/assigned\s+.*card\s+#?\d+/i) || content.match?(/card\s+#?\d+.*assigned/i)
-    sender_display = fizzy_display_name(sender_agent_key) || sender_agent_key.capitalize
-    agent_display = fizzy_display_name(agent_key) || agent_key.capitalize
+    sender_display = agent_display_name(sender_agent_key) || sender_agent_key.capitalize
+    agent_display = agent_display_name(agent_key) || agent_key.capitalize
     LOG.info "[Discord:#{agent_display}] Ignoring cross-agent mention from #{sender_display} — Fizzy card creation/assignment (handled by webhook)"
     return false
   end
 
   depth_key = "discord-#{channel_id}"
   unless agent_dispatch_allowed?(depth_key)
-    sender_display = fizzy_display_name(sender_agent_key) || sender_agent_key.capitalize
-    agent_display = fizzy_display_name(agent_key) || agent_key.capitalize
+    sender_display = agent_display_name(sender_agent_key) || sender_agent_key.capitalize
+    agent_display = agent_display_name(agent_key) || agent_key.capitalize
     LOG.info "[Discord:#{agent_display}] Blocking cross-agent dispatch from #{sender_display} — depth limit reached"
     return false
   end
@@ -425,7 +425,7 @@ def should_stand_down?(in_own_thread, mentioned, is_reply_to_bot, is_bot, agent_
   end
 
   if other_bot_mentioned
-    agent_display = fizzy_display_name(agent_key) || agent_key.capitalize
+    agent_display = agent_display_name(agent_key) || agent_key.capitalize
     LOG.info "[Discord:#{agent_display}] Standing down in own thread — human is directing message to another agent"
   end
 
@@ -435,7 +435,7 @@ end
 def download_attachments(message, message_id, agent_key)
   attachments = message["attachments"] || []
   paths = []
-  agent_display = fizzy_display_name(agent_key) || agent_key.capitalize
+  agent_display = agent_display_name(agent_key) || agent_key.capitalize
 
   attachments.each do |att|
     url = att["url"]
@@ -645,7 +645,7 @@ def manage_discord_worktree(agent_key:, agent_name:, channel_id:, message_id:, i
 end
 
 def pre_create_discord_thread(agent_key, agent_name, channel_id, message_id, clean_content, bot_token)
-  display_name = fizzy_display_name(agent_key)
+  display_name = agent_display_name(agent_key)
   thread = create_discord_thread(channel_id, message_id, name: "#{display_name}: #{clean_content[0..80]}", token: bot_token)
 
   unless thread && thread["id"]

@@ -497,7 +497,6 @@ PROMPT_GITHUB_UAT = <<~'PROMPT'
 PROMPT
 
 CHANNEL_PROMPTS = {
-  fizzy: PROMPT_FIZZY_CHANNEL,
   discord: PROMPT_DISCORD_CHANNEL,
   github: PROMPT_GITHUB_CHANNEL
 }.freeze
@@ -505,27 +504,31 @@ CHANNEL_PROMPTS = {
 # ---------------------------------------------------------------------------
 # render_prompt — composes PROMPT_CORE + channel rules + situation template
 #
-#   channel: :fizzy (default), :discord, or :github
+#   channel: :discord, :github, or plugin-registered channels (e.g., :fizzy)
 # ---------------------------------------------------------------------------
-DEFAULT_COLUMN_IDS = {
-  "right_now" => "03f5xa5q9fog9592pa1279dts",
-  "needs_review" => "03f5ykobhpsd78hbuvajtn8g8",
-  "uat" => "03fsmglsr6az06ppyotawsti8"
-}.freeze
 
-def render_prompt(template, vars = {}, brain_context: "", card_context: "", agent_name: AI_AGENT_NAME, channel: :fizzy, board_key: nil)
+def render_prompt(template, vars = {}, brain_context: "", card_context: "", agent_name: AI_AGENT_NAME, channel: :discord, board_key: nil)
   result = ""
   result += "#{brain_context}\n" unless brain_context.empty?
   result += card_context unless card_context.empty?
   result += PROMPT_CORE
-  result += CHANNEL_PROMPTS.fetch(channel, PROMPT_FIZZY_CHANNEL)
+
+  # Channel prompt: check plugin-registered prompts first, then built-in
+  plugin_prompt = Brainiac.channel_prompts[channel]
+  if plugin_prompt
+    result += plugin_prompt
+  else
+    result += CHANNEL_PROMPTS.fetch(channel, PROMPT_DISCORD_CHANNEL)
+  end
+
   result += template
 
-  # Pre-post comment check: tell the agent to re-fetch comments before posting.
-  # Discord skips this — its supersede mechanism handles mid-session updates differently.
-  case channel
-  when :fizzy   then result += PROMPT_PRE_POST_CHECK_FIZZY
-  when :github  then result += PROMPT_PRE_POST_CHECK_GITHUB
+  # Pre-post comment check: plugin-registered or built-in
+  plugin_pre_post = Brainiac.channel_pre_post_checks[channel]
+  if plugin_pre_post
+    result += plugin_pre_post
+  elsif channel == :github
+    result += PROMPT_PRE_POST_CHECK_GITHUB
   end
 
   result += PROMPT_REFLECTION

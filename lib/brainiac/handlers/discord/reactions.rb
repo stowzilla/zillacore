@@ -27,7 +27,7 @@ def handle_discord_reaction(reaction_data, agent_key, bot_token, bot_user_id)
   emoji = reaction_data["emoji"]
   emoji_name = emoji["name"]
 
-  agent_name = fizzy_display_name(agent_key) || agent_key.capitalize
+  agent_name = agent_display_name(agent_key) || agent_key.capitalize
 
   # Ignore reactions from bots (including self)
   return if user_id == bot_user_id

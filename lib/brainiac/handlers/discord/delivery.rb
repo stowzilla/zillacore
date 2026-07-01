@@ -124,7 +124,7 @@ def deliver_to_channel_thread(response, channel_id, message_id, agent_key, agent
 
     # Tier 3: No thread exists anywhere — create one.
     unless thread_id
-      display_name = fizzy_display_name(agent_key)
+      display_name = agent_display_name(agent_key)
       thread = create_discord_thread(channel_id, message_id, name: "#{display_name}: #{clean_content[0..80]}", token: bot_token)
       if thread && thread["id"]
         thread_id = thread["id"]

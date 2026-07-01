@@ -15,7 +15,6 @@ BRAINIAC_VERSION = Brainiac::VERSION
 
 # --- Environment & paths ---
 
-FIZZY_WEBHOOK_SECRET = ENV.fetch("FIZZY_WEBHOOK_SECRET", nil)
 
 BRAINIAC_DIR = ENV.fetch("BRAINIAC_DIR", File.join(Dir.home, ".brainiac"))
 PROJECTS_FILE = File.join(BRAINIAC_DIR, "projects.json")
@@ -80,21 +79,6 @@ KNOWLEDGE_COLLECTION = "brainiac-knowledge"
 
 ROLES_DIR = File.join(BRAINIAC_DIR, "roles")
 
-# --- Fizzy auth ---
-
-FIZZY_CONFIG_FILE = File.join(BRAINIAC_DIR, "fizzy.json")
-
-def load_fizzy_config
-  return {} unless File.exist?(FIZZY_CONFIG_FILE)
-
-  JSON.parse(File.read(FIZZY_CONFIG_FILE))
-rescue JSON::ParserError => e
-  LOG.error "Failed to parse Fizzy config: #{e.message}"
-  {}
-end
-
-FIZZY_CONFIG = load_fizzy_config
-
 # --- GitHub auth ---
 
 GITHUB_CONFIG_FILE = File.join(BRAINIAC_DIR, "github.json")
@@ -114,53 +98,6 @@ def github_webhook_secret
   # Fallback to env var
   GITHUB_CONFIG["webhook_secret"] || ENV.fetch("GITHUB_WEBHOOK_SECRET", nil)
 end
-
-# --- Board config ---
-
-FIZZY_BOARDS = FIZZY_CONFIG["boards"] || {}
-
-def board_config(board_key)
-  FIZZY_BOARDS[board_key.to_s]
-end
-
-def board_webhook_secret(board_key)
-  config = board_config(board_key)
-  config&.dig("webhook_secret") || FIZZY_WEBHOOK_SECRET
-end
-
-def board_column_id(board_key, column_name)
-  config = board_config(board_key)
-  config&.dig("columns", column_name.to_s)
-end
-
-# Find board_key by board_id (from .fizzy.yaml or payload)
-def board_key_for_id(board_id)
-  FIZZY_BOARDS.each do |key, config|
-    return key if config["board_id"] == board_id
-  end
-  nil
-end
-
-# Determine board_key for a project by reading its .fizzy.yaml
-def board_key_for_project(project_config)
-  fizzy_yaml = File.join(project_config["repo_path"], ".fizzy.yaml")
-  return nil unless File.exist?(fizzy_yaml)
-
-  require "yaml"
-  data = YAML.safe_load_file(fizzy_yaml)
-  board_id = data["board"]
-  board_key_for_id(board_id)
-rescue StandardError => e
-  LOG.warn "Could not read .fizzy.yaml for board lookup: #{e.message}"
-  nil
-end
-
-# Build authorized user IDs from config or env var (env var overrides)
-AUTHORIZED_USER_IDS = if ENV["AUTHORIZED_USER_IDS"] && !ENV["AUTHORIZED_USER_IDS"].empty?
-                        ENV["AUTHORIZED_USER_IDS"].split(",").map(&:strip)
-                      else
-                        (FIZZY_CONFIG["authorized_users"] || []).map { |u| u["id"] }
-                      end
 
 NOTIFICATION_COMMAND = ENV.fetch("NOTIFICATION_COMMAND", nil)
 

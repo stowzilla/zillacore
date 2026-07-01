@@ -70,31 +70,21 @@ def agent_env_var(agent_name, var_name)
   agent_env_for(agent_name)[var_name]
 end
 
-# Convenience: get the Fizzy token for an agent.
-def fizzy_token_for(agent_name)
-  agent_env_var(agent_name, "FIZZY_TOKEN")
-end
-
-# Convenience: build env hash for fizzy CLI calls (backward compat).
-# Falls back to default agent token when the given agent has no token.
-def fizzy_env_for(agent_name)
-  token = fizzy_token_for(agent_name) || fizzy_token_for(AI_AGENT_NAME)
-  token ? { "FIZZY_TOKEN" => token } : {}
-end
-
-def default_fizzy_env
-  fizzy_env_for(AI_AGENT_NAME)
-end
-
-def fizzy_display_name(agent_name)
+# Get the display name for an agent (from agents.json registry).
+# Falls back to the provided name if no registry entry exists.
+# Reads the "fizzy_name" field for backward compat (historically this was the display name field).
+def agent_display_name(agent_name)
   return agent_name unless agent_name
 
   key = agent_name.downcase.gsub(/[^a-z0-9-]/, "-")
   entry = AGENT_REGISTRY[key]
   return agent_name unless entry.is_a?(Hash)
 
-  entry["fizzy_name"] || agent_name
+  entry["display_name"] || entry["display_name"] || entry["fizzy_name"] || agent_name
 end
+
+# Backward-compat alias — plugins and older code may reference this.
+alias_method :fizzy_display_name, :agent_display_name
 
 # Get the role name(s) configured for an agent in agents.json.
 # Returns an array of role names (may be empty).
@@ -132,7 +122,7 @@ end
 
 def agent_roster
   roster = {}
-  all_agent_names.each { |name| roster[name.downcase] = fizzy_display_name(name) }
+  all_agent_names.each { |name| roster[name.downcase] = agent_display_name(name) }
   roster
 end
 
@@ -155,7 +145,7 @@ def all_agent_names
   discover_kiro_agents.each { |name| names << name.capitalize }
   # Include agents from the registry (with their fizzy_name if specified)
   AGENT_REGISTRY.each do |key, entry|
-    names << (entry["fizzy_name"] || key.capitalize)
+    names << (entry["display_name"] || entry["fizzy_name"] || key.capitalize)
   end
   names
 end
@@ -175,7 +165,7 @@ def local_agent_names
   AGENT_REGISTRY.each do |key, entry|
     next unless entry.is_a?(Hash) && entry["local"]
 
-    names << (entry["fizzy_name"] || key.capitalize)
+    names << (entry["display_name"] || entry["fizzy_name"] || key.capitalize)
   end
   names
 end

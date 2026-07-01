@@ -15,7 +15,7 @@ DISCORD_ALL_READY_LOGGED = { done: false }
 
 def start_discord_gateway_for(agent_key, bot_token)
   Thread.new do
-    agent_display = fizzy_display_name(agent_key) || agent_key.capitalize
+    agent_display = agent_display_name(agent_key) || agent_key.capitalize
     bot_user_id = nil
 
     loop do

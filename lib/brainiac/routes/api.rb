@@ -39,7 +39,7 @@ def resolve_session_agent_name(card_key, info)
               else
                 "Unknown"
               end
-  fizzy_display_name(agent_key)
+  agent_display_name(agent_key)
 end
 
 def format_recent_sessions

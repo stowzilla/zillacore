@@ -120,7 +120,7 @@ def discord_mention_roster
     DISCORD_BOTS.each do |agent_key, info|
       next unless info[:user_id]
 
-      display = fizzy_display_name(agent_key) || agent_key.capitalize
+      display = agent_display_name(agent_key) || agent_key.capitalize
       lines << "  - #{display}: `<@#{info[:user_id]}>`"
     end
   end
