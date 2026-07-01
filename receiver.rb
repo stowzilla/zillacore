@@ -9,6 +9,7 @@ require "sinatra"
 require "json"
 
 # Load all modules
+require_relative "lib/brainiac/hooks"
 require_relative "lib/brainiac/config"
 require_relative "lib/brainiac/users"
 require_relative "lib/brainiac/agents"
@@ -80,7 +81,7 @@ if Dir.exist?(CUSTOM_HANDLERS_DIR)
 end
 
 # --- Load gem-based plugins (brainiac-*) ---
-load_plugins!(self)
+load_plugins!(Sinatra::Application)
 
 # --- Sinatra config ---
 set :host_authorization, { permit_all: true }
